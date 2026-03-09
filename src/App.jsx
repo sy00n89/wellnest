@@ -442,6 +442,7 @@ const CheckInScreen = ({ onSubmit }) => {
   const [saving, setSaving] = useState(false);
   const [showAppraisal, setShowAppraisal] = useState(false);
   const [pendingEntry, setPendingEntry] = useState(null);
+  const [vulnerabilities, setVulnerabilities] = useState({});
 
   const toggleArr = (arr, setArr, val) =>
     setArr(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
@@ -454,7 +455,8 @@ const CheckInScreen = ({ onSubmit }) => {
       id: Date.now().toString(),
       date: today(),
       time: new Date().toTimeString().slice(0, 8),
-      mood, stress_level: stress, triggers, physical_signs: signs, notes
+      mood, stress_level: stress, triggers, physical_signs: signs, notes,
+      vulnerability_factors: vulnerabilities,
     };
     setSaving(false);
 
@@ -466,7 +468,7 @@ const CheckInScreen = ({ onSubmit }) => {
       onSubmit(entry);
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
-      setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes("");
+      setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     }
   };
 
@@ -475,7 +477,7 @@ const CheckInScreen = ({ onSubmit }) => {
     onSubmit({ ...pendingEntry, ...appraisalData });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
-    setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes("");
+    setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     setPendingEntry(null);
   };
 
@@ -484,7 +486,7 @@ const CheckInScreen = ({ onSubmit }) => {
     onSubmit(pendingEntry);
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
-    setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes("");
+    setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     setPendingEntry(null);
   };
 
@@ -600,8 +602,56 @@ const CheckInScreen = ({ onSubmit }) => {
         </div>
       </div>
 
+      {/* Vulnerability Factors */}
+      <div className="card fade-up-5" style={{ marginBottom: 16 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
+          Background Factors
+        </h3>
+        <p style={{ fontSize: 13, color: T.textMuted, marginBottom: 4 }}>Conditions that affect your stress resilience today.</p>
+        <p style={{ fontSize: 11, color: T.textMuted, marginBottom: 16, fontStyle: "italic" }}>
+          Based on the Allostatic Load Model — McEwen (1998)
+        </p>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {[
+            { key: "sleep", label: "Sleep quality", icon: "🌙", desc: "How did you sleep last night?" },
+            { key: "meals", label: "Meals today", icon: "🍽️", desc: "Did you eat regularly today?" },
+            { key: "conflict", label: "Interpersonal tension", icon: "🤝", desc: "Any unresolved conflict or friction?" },
+            { key: "social_media", label: "Social media exposure", icon: "📱", desc: "How much passive scrolling today?" },
+          ].map(factor => (
+            <div key={factor.key}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                <span style={{ fontSize: 14 }}>{factor.icon}</span>
+                <div>
+                  <p style={{ fontSize: 13, fontWeight: 600, color: T.textPrimary }}>{factor.label}</p>
+                  <p style={{ fontSize: 11, color: T.textMuted }}>{factor.desc}</p>
+                </div>
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                {["Fine", "Somewhat", "Significantly"].map(level => {
+                  const colors = { Fine: T.sage, Somewhat: "#E8A838", Significantly: T.clay };
+                  const bgs = { Fine: T.sagePale, Somewhat: "#FEF9EE", Significantly: "#FDF3EE" };
+                  const selected = vulnerabilities[factor.key] === level;
+                  return (
+                    <button key={level} onClick={() => setVulnerabilities(prev => ({ ...prev, [factor.key]: level }))} style={{
+                      flex: 1, padding: "8px 4px", borderRadius: 10, border: "1.5px solid",
+                      borderColor: selected ? colors[level] : T.border,
+                      background: selected ? bgs[level] : T.parchment,
+                      color: selected ? colors[level] : T.textMuted,
+                      fontSize: 12, fontWeight: selected ? 700 : 500, cursor: "pointer",
+                      transition: "all 0.15s", fontFamily: "DM Sans, sans-serif",
+                    }}>
+                      {level}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
       {/* Notes */}
-      <div className="card fade-up-5" style={{ marginBottom: 24 }}>
+      <div className="card fade-up-6" style={{ marginBottom: 24 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 12 }}>
           Reflection
         </h3>
@@ -638,7 +688,10 @@ const InsightsScreen = ({ entries }) => {
       const entrySummary = recentEntries.map(e => {
         const base = `Date: ${e.date}, Mood: ${e.mood}, Stress: ${e.stress_level}/10, Triggers: ${(e.triggers||[]).join(", ")||"none"}, Physical signs: ${(e.physical_signs||[]).join(", ")||"none"}, Notes: ${e.notes||"none"}`;
         const appraisal = e.appraisal_type ? `, Appraisal: viewed as a ${e.appraisal_type}, Resources felt: ${(e.perceived_resources||[]).join(", ")||"none"}${e.appraisal_reflection ? `, Reflection: "${e.appraisal_reflection}"` : ""}` : "";
-        return base + appraisal;
+        const vuln = e.vulnerability_factors && Object.keys(e.vulnerability_factors).length > 0
+          ? `, Background factors: ${Object.entries(e.vulnerability_factors).map(([k,v]) => `${k}: ${v}`).join(", ")}`
+          : "";
+        return base + appraisal + vuln;
       }).join("\n");
 
       const prompt = `You are a warm, thoughtful wellness companion grounded in stress science. A user has been tracking their stress and wellbeing. Here are their recent check-in entries:\n\n${entrySummary}\n\nBased on these entries, write a structured insight report with exactly 5 sections. Each section must start with its label on its own line, followed by 2-3 sentences of content. Use this exact format:\n\nWHAT YOUR BODY IS SAYING\n[2-3 sentences about physical signs and what they signal. Grounded in Allostatic Load — the body accumulates stress before the mind recognizes it.]\n\nWHAT'S DRIVING IT\n[2-3 sentences identifying the key triggers and patterns. Grounded in Perceived Stress Theory — stress is shaped by what we perceive as threatening or uncontrollable.]\n\nHOW YOU'RE INTERPRETING IT\n[2-3 sentences on whether the user seems to be appraising situations as threats or challenges. Grounded in Cognitive Appraisal Theory by Lazarus and Folkman.]\n\nA MOMENT THAT HELPED\n[2-3 sentences identifying any lighter or calmer moments and what seemed to make them possible. Grounded in Behavioral Activation — certain behaviors buffer stress.]\n\nONE THING WORTH NOTICING\n[1-2 sentences. A single gentle observation the user can carry with them. Not advice — just awareness.]\n\nRules: Do not use markdown headers, bullet points, or asterisks. Do not give medical advice or diagnoses. Do not use the word streak. Write in plain warm sentences. Keep each section short and easy to read.`;
@@ -964,6 +1017,30 @@ const HistoryScreen = ({ entries, onDelete }) => {
                     </p>
                   )}
                   <p style={{ fontSize: 10, color: T.textMuted, marginTop: 6 }}>Based on Lazarus & Folkman's Cognitive Appraisal Model (1984)</p>
+                </div>
+              )}
+
+              {entry.vulnerability_factors && Object.keys(entry.vulnerability_factors).length > 0 && (
+                <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: T.parchmentDark, borderLeft: `3px solid ${T.textMuted}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
+                    <span style={{ fontSize: 12 }}>🌡️</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Background factors
+                    </span>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                    {Object.entries(entry.vulnerability_factors).map(([key, val]) => {
+                      const icons = { sleep: "🌙", meals: "🍽️", conflict: "🤝", social_media: "📱" };
+                      const colors = { Fine: T.sage, Somewhat: "#E8A838", Significantly: T.clay };
+                      const labels = { sleep: "Sleep", meals: "Meals", conflict: "Tension", social_media: "Social media" };
+                      return (
+                        <span key={key} style={{ fontSize: 11, padding: "3px 10px", borderRadius: 100, background: "white", border: `1px solid ${colors[val] || T.border}`, color: colors[val] || T.textMuted }}>
+                          {icons[key]} {labels[key]}: {val}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p style={{ fontSize: 10, color: T.textMuted, marginTop: 6 }}>Based on McEwen's Allostatic Load Model (1998)</p>
                 </div>
               )}
             </div>
