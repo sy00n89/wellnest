@@ -1389,17 +1389,51 @@ const PLANT_STAGES = ["sprout", "seedling", "plant", "young_tree", "mature_tree"
 const STAGE_NAMES = { sprout: "Sprout", seedling: "Seedling", plant: "Young Plant", young_tree: "Young Tree", mature_tree: "Mature Tree" };
 const STAGE_DESC = {
   sprout: "Just beginning. Every check-in is a moment of care.",
-  seedling: "Taking root. You're building awareness, one day at a time.",
+  seedling: "Taking root. You're building self-awareness, one moment at a time.",
   plant: "Growing steadily. Your pattern recognition is deepening.",
   young_tree: "Standing tall. You're learning what your body and mind need.",
   mature_tree: "A full presence. You carry self-knowledge that is yours alone.",
 };
 
+// Stage thresholds based on engagement depth (not consecutive days)
+const STAGE_THRESHOLDS = [0, 5, 12, 22, 35];
+const STAGE_NEXT = [5, 12, 22, 35, 35];
+
 const PlantScreen = ({ plantData, entries }) => {
-  const stage = plantData?.stage || "sprout";
+  // ── Behavioral Reinforcement Metrics ──────────────────────────────────────
+  const totalCheckIns = entries.length;
+
+  // Showed up after hard days — check-ins within 24hrs of a 7+ entry
+  const hardDayFollowUps = entries.filter((e, i) => {
+    if (i === entries.length - 1) return false;
+    const prev = entries[i + 1]; // entries sorted newest first
+    if (Number(prev.stress_level) < 7) return false;
+    const curr = new Date(e.date + "T" + (e.time || "12:00:00"));
+    const prevDate = new Date(prev.date + "T" + (prev.time || "12:00:00"));
+    const diffHours = (curr - prevDate) / (1000 * 60 * 60);
+    return diffHours <= 48 && diffHours >= 0;
+  }).length;
+
+  // Gentle days — unique days where max stress was ≤ 4
+  const dayStress = {};
+  entries.forEach(e => {
+    if (!dayStress[e.date]) dayStress[e.date] = [];
+    dayStress[e.date].push(Number(e.stress_level));
+  });
+  const gentleDays = Object.values(dayStress).filter(stresses => Math.max(...stresses) <= 4).length;
+
+  // Engagement depth score drives plant growth
+  const engagementScore = totalCheckIns + (hardDayFollowUps * 2) + gentleDays;
+  const stage = engagementScore >= 35 ? "mature_tree"
+    : engagementScore >= 22 ? "young_tree"
+    : engagementScore >= 12 ? "plant"
+    : engagementScore >= 5 ? "seedling"
+    : "sprout";
   const stageIdx = PLANT_STAGES.indexOf(stage);
-  const checkIns = entries.length;
-  const daysActive = plantData?.days_active || checkIns;
+  const currentThreshold = STAGE_THRESHOLDS[stageIdx];
+  const nextThreshold = STAGE_NEXT[stageIdx];
+  const progressPct = stageIdx === 4 ? 100
+    : Math.round(((engagementScore - currentThreshold) / (nextThreshold - currentThreshold)) * 100);
 
   return (
     <div className="wn-page">
@@ -1420,12 +1454,12 @@ const PlantScreen = ({ plantData, entries }) => {
         <h3 style={{ fontFamily: "Lora, serif", fontSize: 26, fontWeight: 600, color: T.sage, marginBottom: 8 }}>
           {STAGE_NAMES[stage]}
         </h3>
-        <p style={{ fontSize: 15, color: T.textSecondary, lineHeight: 1.7, maxWidth: 280, margin: "0 auto 24px" }}>
+        <p style={{ fontSize: 15, color: T.textSecondary, lineHeight: 1.7, maxWidth: 280, margin: "0 auto 20px" }}>
           {STAGE_DESC[stage]}
         </p>
 
-        {/* Stage progress */}
-        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 8 }}>
+        {/* Stage dots */}
+        <div style={{ display: "flex", justifyContent: "center", gap: 8, marginBottom: 16 }}>
           {PLANT_STAGES.map((s, i) => (
             <div key={s} style={{
               width: 32, height: 32, borderRadius: "50%",
@@ -1437,26 +1471,72 @@ const PlantScreen = ({ plantData, entries }) => {
             </div>
           ))}
         </div>
-        <p style={{ fontSize: 12, color: T.textMuted }}>Stage {stageIdx + 1} of {PLANT_STAGES.length}</p>
+
+        {/* Progress bar to next stage */}
+        {stageIdx < 4 && (
+          <div style={{ maxWidth: 240, margin: "0 auto" }}>
+            <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 6 }}>
+              <span style={{ fontSize: 11, color: T.textMuted }}>{STAGE_NAMES[stage]}</span>
+              <span style={{ fontSize: 11, color: T.textMuted }}>{STAGE_NAMES[PLANT_STAGES[stageIdx + 1]]}</span>
+            </div>
+            <div style={{ height: 6, borderRadius: 3, background: T.parchmentDark, overflow: "hidden" }}>
+              <div style={{
+                height: "100%", borderRadius: 3, background: T.sage,
+                width: `${progressPct}%`, transition: "width 0.6s ease",
+              }} />
+            </div>
+            <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6 }}>{progressPct}% toward next stage</p>
+          </div>
+        )}
+        {stageIdx === 4 && (
+          <p style={{ fontSize: 12, color: T.sage, fontWeight: 600 }}>Fully grown ✦</p>
+        )}
       </div>
 
-      {/* Stats */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginBottom: 16 }}>
-        <div className="card fade-up-2" style={{ textAlign: "center" }}>
-          <p style={{ fontFamily: "Lora, serif", fontSize: 36, fontWeight: 600, color: T.sage }}>{checkIns}</p>
-          <p style={{ fontSize: 13, color: T.textSecondary, marginTop: 4 }}>times you showed up</p>
-        </div>
-        <div className="card fade-up-2" style={{ textAlign: "center" }}>
-          <p style={{ fontFamily: "Lora, serif", fontSize: 36, fontWeight: 600, color: T.clay }}>{daysActive}</p>
-          <p style={{ fontSize: 13, color: T.textSecondary, marginTop: 4 }}>days of practice</p>
-        </div>
+      {/* Behavioral Reinforcement Stats */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 10, marginBottom: 16 }}>
+        {[
+          {
+            icon: "○", color: T.sage, value: totalCheckIns,
+            label: "Moments of awareness",
+            desc: "Every check-in counts equally — showing up is the practice.",
+          },
+          {
+            icon: "⚡", color: T.clay, value: hardDayFollowUps,
+            label: "Showed up after hard moments",
+            desc: "Check-ins after high stress — the most meaningful engagement.",
+          },
+          {
+            icon: "🌤", color: "#7B9E87", value: gentleDays,
+            label: "Gentle days",
+            desc: "Days where stress stayed low — rest is part of the pattern.",
+          },
+        ].map(stat => (
+          <div key={stat.label} className="card fade-up-2" style={{
+            display: "flex", alignItems: "center", gap: 16, padding: "16px 20px",
+          }}>
+            <div style={{
+              width: 48, height: 48, borderRadius: 14, flexShrink: 0,
+              background: stat.color + "18", display: "flex", alignItems: "center", justifyContent: "center",
+            }}>
+              <p style={{ fontFamily: "Lora, serif", fontSize: 22, fontWeight: 700, color: stat.color }}>{stat.value}</p>
+            </div>
+            <div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 2 }}>{stat.label}</p>
+              <p style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5 }}>{stat.desc}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
       {/* Philosophy note */}
-      <div className="card fade-up-3" style={{ background: T.parchmentDark, border: "none" }}>
+      <div className="card fade-up-3" style={{ background: T.parchmentDark, border: "none", marginBottom: 16 }}>
         <p style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 14, color: T.textSecondary, lineHeight: 1.8, textAlign: "center" }}>
           "Progress here isn't about perfect days.<br />
           It's about the moments you chose to notice."
+        </p>
+        <p style={{ fontSize: 10, color: T.textMuted, textAlign: "center", marginTop: 10 }}>
+          Grounded in Behavioral Activation theory · Martell, Dimidjian & Herman-Dunn (2010)
         </p>
       </div>
     </div>
