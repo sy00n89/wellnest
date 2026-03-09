@@ -1054,6 +1054,90 @@ const InsightsScreen = ({ entries }) => {
         </div>
       )}
 
+      {/* Trigger-to-Symptom Connection Map */}
+      {(() => {
+        // Build trigger → symptoms map
+        const connectionMap = {};
+        entries.forEach(e => {
+          (e.triggers || []).forEach(trigger => {
+            if (!connectionMap[trigger]) connectionMap[trigger] = {};
+            (e.physical_signs || []).forEach(sign => {
+              connectionMap[trigger][sign] = (connectionMap[trigger][sign] || 0) + 1;
+            });
+          });
+        });
+        const topConnections = Object.entries(connectionMap)
+          .filter(([, signs]) => Object.keys(signs).length > 0)
+          .sort((a, b) => Object.values(b[1]).reduce((s, v) => s + v, 0) - Object.values(a[1]).reduce((s, v) => s + v, 0))
+          .slice(0, 5);
+
+        if (topConnections.length === 0) return null;
+
+        return (
+          <div className="card fade-up-5" style={{ marginBottom: 16 }}>
+            <div style={{ marginBottom: 16 }}>
+              <h3 style={{ fontSize: 14, fontWeight: 600, color: T.textSecondary, textTransform: "uppercase", letterSpacing: "0.08em", marginBottom: 4 }}>
+                Trigger → Body Connection
+              </h3>
+              <p style={{ fontSize: 12, color: T.textMuted }}>
+                How your stressors tend to show up physically.
+              </p>
+              <p style={{ fontSize: 11, color: T.textMuted, fontStyle: "italic", marginTop: 3 }}>
+                Based on McEwen's Allostatic Load Model (1998)
+              </p>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+              {topConnections.map(([trigger, signs]) => {
+                const sortedSigns = Object.entries(signs).sort((a, b) => b[1] - a[1]);
+                const maxCount = sortedSigns[0][1];
+                return (
+                  <div key={trigger}>
+                    {/* Trigger label */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+                      <div style={{
+                        padding: "5px 12px", borderRadius: 8,
+                        background: T.clayLight, border: `1px solid ${T.clay}22`,
+                        fontSize: 12, fontWeight: 700, color: T.clay,
+                      }}>
+                        {trigger}
+                      </div>
+                      <div style={{ flex: 1, height: 1, background: T.border }} />
+                    </div>
+
+                    {/* Symptom tags */}
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 7, paddingLeft: 8 }}>
+                      {sortedSigns.map(([sign, count]) => {
+                        const strength = count / maxCount;
+                        const opacity = 0.35 + strength * 0.65;
+                        const size = 11 + Math.round(strength * 3);
+                        return (
+                          <div key={sign} style={{
+                            padding: "5px 12px", borderRadius: 100,
+                            background: `rgba(74, 124, 89, ${opacity * 0.18})`,
+                            border: `1.5px solid rgba(74, 124, 89, ${opacity * 0.6})`,
+                            fontSize: size, color: T.sage,
+                            fontWeight: count === maxCount ? 700 : 500,
+                            display: "flex", alignItems: "center", gap: 5,
+                          }}>
+                            {sign}
+                            {count > 1 && (
+                              <span style={{ fontSize: 10, fontWeight: 700, color: T.sageMid }}>
+                                ×{count}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })()}
+
       {/* Share with clinician */}
       <div className="card fade-up-5" style={{ background: T.parchmentDark, border: "none", textAlign: "center" }}>
         <p style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 15, color: T.textSecondary, marginBottom: 6 }}>
