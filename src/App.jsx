@@ -160,7 +160,12 @@ const GlobalStyles = () => (
 );
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
-const today = () => new Date().toISOString().split("T")[0];
+const today = () => {
+  const d = new Date();
+  const offset = d.getTimezoneOffset();
+  const local = new Date(d.getTime() - offset * 60000);
+  return local.toISOString().split("T")[0];
+};
 
 const greet = () => {
   const h = new Date().getHours();
@@ -430,7 +435,7 @@ const CognitiveAppraisalModal = ({ onComplete, onSkip }) => {
   );
 };
 
-const CheckInScreen = ({ onSubmit }) => {
+const CheckInScreen = ({ onSubmit, entries = [] }) => {
   const [stress, setStress] = useState(5);
   const stressRef = React.useRef(5);
   const handleStressChange = (n) => { setStress(n); stressRef.current = n; };
@@ -443,6 +448,70 @@ const CheckInScreen = ({ onSubmit }) => {
   const [showAppraisal, setShowAppraisal] = useState(false);
   const [pendingEntry, setPendingEntry] = useState(null);
   const [vulnerabilities, setVulnerabilities] = useState({});
+  const [promptDismissed, setPromptDismissed] = useState(false);
+
+  // Compute contextual prompt from entry patterns
+  const contextualPrompt = React.useMemo(() => {
+    if (!entries.length) return null;
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+
+    const localDateStr = (d) => {
+      const offset = d.getTimezoneOffset();
+      const local = new Date(d.getTime() - offset * 60000);
+      return local.toISOString().split("T")[0];
+    };
+
+    const todayStr = localDateStr(new Date());
+    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    const yesterdayStr = localDateStr(yesterdayDate);
+
+    const todayEntries = entries.filter(e => e.date === todayStr);
+
+    // 1. Post high-stress follow-up — most recent entry was high stress and not today
+    const mostRecent = entries[0];
+    const mostRecentHigh = mostRecent && Number(mostRecent.stress_level) >= 7 && mostRecent.date !== todayStr;
+    if (mostRecentHigh && todayEntries.length === 0) return {
+      icon: "🌊", color: T.clay, bg: "#FDF3EE",
+      text: "Your last check-in felt heavy. It can help to check in again — even briefly.",
+    };
+
+    // 2. Vulnerability pattern — poor sleep 2+ times this week
+    const weekAgo = new Date(); weekAgo.setDate(weekAgo.getDate() - 7);
+    const weekAgoStr = localDateStr(weekAgo);
+    const recentEntries = entries.filter(e => e.date >= weekAgoStr);
+    const poorSleep = recentEntries.filter(e => e.vulnerability_factors?.sleep === "Significantly").length;
+    if (poorSleep >= 2) return {
+      icon: "🌙", color: "#7B6EA6", bg: "#F5F3FA",
+      text: `You've logged significantly disrupted sleep ${poorSleep} times this week. Your nervous system may be carrying more than usual.`,
+    };
+
+    // 3. Time pattern — detect high-stress day-of-week
+    const dayEntriesMap = {};
+    entries.forEach(e => {
+      const d = new Date(e.date + "T12:00:00").getDay();
+      if (!dayEntriesMap[d]) dayEntriesMap[d] = [];
+      dayEntriesMap[d].push(Number(e.stress_level));
+    });
+    const todayAvg = dayEntriesMap[dayOfWeek]?.length
+      ? dayEntriesMap[dayOfWeek].reduce((a, b) => a + b, 0) / dayEntriesMap[dayOfWeek].length
+      : null;
+    const dayNames = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+    if (todayAvg && todayAvg >= 6.5 && dayEntriesMap[dayOfWeek].length >= 2) return {
+      icon: "📅", color: T.sage, bg: T.sagePale,
+      text: `${dayNames[dayOfWeek]}s have tended to feel heavier for you. Worth checking in with yourself today.`,
+    };
+
+    // 4. Streak of calm — 3+ lighter days
+    const last3 = entries.slice(0, 3);
+    const allCalm = last3.length === 3 && last3.every(e => Number(e.stress_level) <= 4);
+    if (allCalm) return {
+      icon: "🌤️", color: T.sage, bg: T.sagePale,
+      text: "You've had a few lighter days recently. This is worth noticing — what's been different?",
+    };
+
+    return null;
+  }, [entries]);
 
   const toggleArr = (arr, setArr, val) =>
     setArr(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
@@ -508,6 +577,29 @@ const CheckInScreen = ({ onSubmit }) => {
         </h2>
         <p style={{ fontSize: 15, color: T.textSecondary, marginTop: 4 }}>How are you right now?</p>
       </div>
+
+      {/* Contextual Prompt */}
+      {contextualPrompt && !promptDismissed && !saved && (
+        <div className="fade-up" style={{
+          marginBottom: 20, padding: "14px 16px", borderRadius: 14,
+          background: contextualPrompt.bg, borderLeft: `4px solid ${contextualPrompt.color}`,
+          display: "flex", alignItems: "flex-start", gap: 10,
+        }}>
+          <span style={{ fontSize: 18, flexShrink: 0 }}>{contextualPrompt.icon}</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 13, color: T.textPrimary, lineHeight: 1.6 }}>
+              {contextualPrompt.text}
+            </p>
+            <p style={{ fontSize: 10, color: T.textMuted, marginTop: 4, fontStyle: "italic" }}>
+              Based on your recent patterns · Perceived Stress Theory
+            </p>
+          </div>
+          <button onClick={() => setPromptDismissed(true)} style={{
+            background: "none", border: "none", color: T.textMuted,
+            fontSize: 16, cursor: "pointer", padding: "0 4px", flexShrink: 0,
+          }}>×</button>
+        </div>
+      )}
 
       {saved && (
         <div className="fade-up card" style={{ background: T.sagePale, border: `1px solid ${T.sageLight}`, marginBottom: 20, textAlign: "center" }}>
@@ -1425,8 +1517,8 @@ export default function App() {
     }
   };
 
-  const handleBegin = () => {
-    loadData();
+  const handleBegin = async () => {
+    await loadData();
     setScreen("checkin");
   };
 
@@ -1487,7 +1579,7 @@ export default function App() {
         {loading && (
           <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, background: T.sage, zIndex: 999, opacity: 0.8 }} />
         )}
-        {screen === "checkin" && <CheckInScreen onSubmit={handleSubmitEntry} />}
+        {screen === "checkin" && <CheckInScreen onSubmit={handleSubmitEntry} entries={entries} />}
         {screen === "insights" && <InsightsScreen entries={entries} />}
         {screen === "history" && <HistoryScreen entries={entries} onDelete={handleDelete} />}
         {screen === "plant" && <PlantScreen plantData={plantData} entries={entries} />}
