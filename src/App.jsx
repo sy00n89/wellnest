@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 
 // ── Google Fonts ──────────────────────────────────────────────────────────────
 const FontLoader = () => (
@@ -60,6 +60,10 @@ const GlobalStyles = () => (
     @keyframes fadeUp {
       from { opacity: 0; transform: translateY(16px); }
       to { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes slideUp {
+      from { transform: translateY(100%); }
+      to { transform: translateY(0); }
     }
     @keyframes breathe {
       0%, 100% { transform: scale(1); }
@@ -307,14 +311,137 @@ const MOODS = [
 const PHYSICAL_SIGNS = ["Neck tension", "Headache", "Facial tightness", "Fatigue", "Restlessness", "Appetite changes", "Dizziness", "Chest tightness"];
 const TRIGGERS = ["Work deadline", "Relationship", "Sleep deprivation", "Social pressure", "Health concern", "Financial", "School / Studies", "Uncertainty"];
 
+// ── Cognitive Appraisal Modal ─────────────────────────────────────────────────
+const APPRAISAL_RESOURCES = [
+  "Support from others", "Past experience", "Enough time", "Energy & focus", "My own skills", "None of these"
+];
+
+const CognitiveAppraisalModal = ({ onComplete, onSkip }) => {
+  const [appraisal, setAppraisal] = useState(null); // "threat" | "challenge"
+  const [resources, setResources] = useState([]);
+  const [reflection, setReflection] = useState("");
+
+  const toggleResource = (r) =>
+    setResources(prev => prev.includes(r) ? prev.filter(v => v !== r) : [...prev, r]);
+
+  const handleDone = () => {
+    onComplete({ appraisal_type: appraisal, perceived_resources: resources, appraisal_reflection: reflection });
+  };
+
+  return (
+    <div style={{
+      position: "fixed", inset: 0, background: "rgba(0,0,0,0.4)", zIndex: 200,
+      display: "flex", alignItems: "flex-end", justifyContent: "center",
+    }}>
+      <div style={{
+        background: T.surface, borderRadius: "24px 24px 0 0", padding: "32px 24px 48px",
+        width: "100%", maxWidth: 600, animation: "slideUp 0.3s ease",
+      }}>
+        {/* Header */}
+        <div style={{ marginBottom: 24 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
+            <span style={{ fontSize: 18 }}>💭</span>
+            <h3 style={{ fontFamily: "Lora, serif", fontSize: 20, fontWeight: 600, color: T.textPrimary }}>
+              One more moment
+            </h3>
+          </div>
+          <p style={{ fontSize: 14, color: T.textSecondary, lineHeight: 1.6 }}>
+            How you interpret a stressful situation shapes how it affects you. Take a breath and reflect.
+          </p>
+          <p style={{ fontSize: 11, color: T.textMuted, marginTop: 6, fontStyle: "italic" }}>
+            Based on Lazarus & Folkman's Cognitive Appraisal Model (1984)
+          </p>
+        </div>
+
+        {/* Question 1 — Threat vs Challenge */}
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: T.textPrimary, marginBottom: 12 }}>
+            In this moment, this situation feels more like a…
+          </p>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+            {[
+              { value: "threat", label: "Threat", desc: "I might fail, lose control, or be judged", emoji: "⚡" },
+              { value: "challenge", label: "Challenge", desc: "I can handle this or learn from it", emoji: "🌱" },
+            ].map(opt => (
+              <button key={opt.value} onClick={() => setAppraisal(opt.value)} style={{
+                padding: "14px 12px", borderRadius: 14, border: "2px solid",
+                borderColor: appraisal === opt.value ? (opt.value === "threat" ? T.clay : T.sage) : T.border,
+                background: appraisal === opt.value ? (opt.value === "threat" ? "#FDF3EE" : T.sagePale) : T.parchment,
+                cursor: "pointer", textAlign: "left", transition: "all 0.15s",
+              }}>
+                <div style={{ fontSize: 20, marginBottom: 6 }}>{opt.emoji}</div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: T.textPrimary, marginBottom: 4 }}>{opt.label}</div>
+                <div style={{ fontSize: 11, color: T.textSecondary, lineHeight: 1.4 }}>{opt.desc}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Question 2 — Resources */}
+        <div style={{ marginBottom: 24 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: T.textPrimary, marginBottom: 4 }}>
+            What resources did you feel you had available?
+          </p>
+          <p style={{ fontSize: 12, color: T.textMuted, marginBottom: 12 }}>Select all that apply</p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+            {APPRAISAL_RESOURCES.map(r => (
+              <button key={r} onClick={() => toggleResource(r)} style={{
+                padding: "7px 14px", borderRadius: 20, border: "1.5px solid",
+                borderColor: resources.includes(r) ? T.sage : T.border,
+                background: resources.includes(r) ? T.sagePale : T.parchment,
+                color: resources.includes(r) ? T.sage : T.textSecondary,
+                fontSize: 13, fontWeight: 500, cursor: "pointer", transition: "all 0.15s",
+                fontFamily: "DM Sans, sans-serif",
+              }}>
+                {r}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Question 3 — Reflection */}
+        <div style={{ marginBottom: 28 }}>
+          <p style={{ fontSize: 14, fontWeight: 600, color: T.textPrimary, marginBottom: 8 }}>
+            In one sentence, what made this hard? <span style={{ fontWeight: 400, color: T.textMuted }}>(optional)</span>
+          </p>
+          <textarea
+            className="wn-input"
+            rows={2}
+            value={reflection}
+            onChange={e => setReflection(e.target.value)}
+            placeholder="e.g. I felt like I had no control over the outcome…"
+          />
+        </div>
+
+        {/* Actions */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button className="btn-primary" onClick={handleDone} disabled={!appraisal}>
+            Save reflection
+          </button>
+          <button onClick={onSkip} style={{
+            padding: "12px", border: "none", background: "transparent",
+            color: T.textMuted, fontSize: 14, cursor: "pointer", fontFamily: "DM Sans, sans-serif",
+          }}>
+            Skip for now
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const CheckInScreen = ({ onSubmit }) => {
   const [stress, setStress] = useState(5);
+  const stressRef = React.useRef(5);
+  const handleStressChange = (n) => { setStress(n); stressRef.current = n; };
   const [mood, setMood] = useState(null);
   const [signs, setSigns] = useState([]);
   const [triggers, setTriggers] = useState([]);
   const [notes, setNotes] = useState("");
   const [saved, setSaved] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [showAppraisal, setShowAppraisal] = useState(false);
+  const [pendingEntry, setPendingEntry] = useState(null);
 
   const toggleArr = (arr, setArr, val) =>
     setArr(prev => prev.includes(val) ? prev.filter(v => v !== val) : [...prev, val]);
@@ -323,15 +450,52 @@ const CheckInScreen = ({ onSubmit }) => {
     if (!mood) return;
     setSaving(true);
     await new Promise(r => setTimeout(r, 800));
-    onSubmit({ id: Date.now().toString(), date: today(), time: new Date().toTimeString().slice(0, 8), mood, stress_level: stress, triggers, physical_signs: signs, notes });
+    const entry = {
+      id: Date.now().toString(),
+      date: today(),
+      time: new Date().toTimeString().slice(0, 8),
+      mood, stress_level: stress, triggers, physical_signs: signs, notes
+    };
     setSaving(false);
+
+    // If high stress, show appraisal modal first
+    if (stressRef.current >= 7) {
+      setPendingEntry(entry);
+      setShowAppraisal(true);
+    } else {
+      onSubmit(entry);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3000);
+      setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes("");
+    }
+  };
+
+  const handleAppraisalComplete = (appraisalData) => {
+    setShowAppraisal(false);
+    onSubmit({ ...pendingEntry, ...appraisalData });
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes("");
+    setPendingEntry(null);
+  };
+
+  const handleAppraisalSkip = () => {
+    setShowAppraisal(false);
+    onSubmit(pendingEntry);
+    setSaved(true);
+    setTimeout(() => setSaved(false), 3000);
+    setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes("");
+    setPendingEntry(null);
   };
 
   return (
     <div className="wn-page">
+      {showAppraisal && (
+        <CognitiveAppraisalModal
+          onComplete={handleAppraisalComplete}
+          onSkip={handleAppraisalSkip}
+        />
+      )}
       {/* Header */}
       <div className="fade-up" style={{ marginBottom: 32 }}>
         <p style={{ fontSize: 13, fontWeight: 500, color: T.textMuted, marginBottom: 4 }}>
@@ -363,7 +527,7 @@ const CheckInScreen = ({ onSubmit }) => {
         {/* Number selector */}
         <div style={{ display: "flex", gap: 6, justifyContent: "space-between", marginBottom: 12 }}>
           {[1,2,3,4,5,6,7,8,9,10].map(n => (
-            <button key={n} onClick={() => setStress(n)} style={{
+            <button key={n} onClick={() => handleStressChange(n)} style={{
               flex: 1, aspectRatio: "1", borderRadius: 10, border: "1.5px solid",
               borderColor: stress === n ? stressColor(n) : T.border,
               background: stress === n ? stressColor(n) : T.parchment,
@@ -471,9 +635,11 @@ const InsightsScreen = ({ entries }) => {
       // Build a structured summary of the user's recent entries
       const recentEntries = entries.slice(0, 14);
 
-      const entrySummary = recentEntries.map(e =>
-        `Date: ${e.date}, Time: ${e.time?.slice(0,5)}, Mood: ${e.mood}, Stress: ${e.stress_level}/10, Triggers: ${(e.triggers||[]).join(", ")||"none"}, Physical signs: ${(e.physical_signs||[]).join(", ")||"none"}, Notes: ${e.notes||"none"}`
-      ).join("\n");
+      const entrySummary = recentEntries.map(e => {
+        const base = `Date: ${e.date}, Mood: ${e.mood}, Stress: ${e.stress_level}/10, Triggers: ${(e.triggers||[]).join(", ")||"none"}, Physical signs: ${(e.physical_signs||[]).join(", ")||"none"}, Notes: ${e.notes||"none"}`;
+        const appraisal = e.appraisal_type ? `, Appraisal: viewed as a ${e.appraisal_type}, Resources felt: ${(e.perceived_resources||[]).join(", ")||"none"}${e.appraisal_reflection ? `, Reflection: "${e.appraisal_reflection}"` : ""}` : "";
+        return base + appraisal;
+      }).join("\n");
 
       const prompt = `You are a warm, thoughtful wellness companion grounded in stress science. A user has been tracking their stress and wellbeing. Here are their recent check-in entries:\n\n${entrySummary}\n\nBased on these entries, write a structured insight report with exactly 5 sections. Each section must start with its label on its own line, followed by 2-3 sentences of content. Use this exact format:\n\nWHAT YOUR BODY IS SAYING\n[2-3 sentences about physical signs and what they signal. Grounded in Allostatic Load — the body accumulates stress before the mind recognizes it.]\n\nWHAT'S DRIVING IT\n[2-3 sentences identifying the key triggers and patterns. Grounded in Perceived Stress Theory — stress is shaped by what we perceive as threatening or uncontrollable.]\n\nHOW YOU'RE INTERPRETING IT\n[2-3 sentences on whether the user seems to be appraising situations as threats or challenges. Grounded in Cognitive Appraisal Theory by Lazarus and Folkman.]\n\nA MOMENT THAT HELPED\n[2-3 sentences identifying any lighter or calmer moments and what seemed to make them possible. Grounded in Behavioral Activation — certain behaviors buffer stress.]\n\nONE THING WORTH NOTICING\n[1-2 sentences. A single gentle observation the user can carry with them. Not advice — just awareness.]\n\nRules: Do not use markdown headers, bullet points, or asterisks. Do not give medical advice or diagnoses. Do not use the word streak. Write in plain warm sentences. Keep each section short and easy to read.`;
 
@@ -777,6 +943,28 @@ const HistoryScreen = ({ entries, onDelete }) => {
                 <p style={{ fontSize: 13, color: T.textSecondary, fontStyle: "italic", lineHeight: 1.6 }}>
                   "{entry.notes}"
                 </p>
+              )}
+
+              {entry.appraisal_type && (
+                <div style={{ marginTop: 10, padding: "10px 12px", borderRadius: 10, background: entry.appraisal_type === "threat" ? "#FDF3EE" : T.sagePale, borderLeft: `3px solid ${entry.appraisal_type === "threat" ? T.clay : T.sage}` }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 4 }}>
+                    <span style={{ fontSize: 12 }}>{entry.appraisal_type === "threat" ? "⚡" : "🌱"}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: entry.appraisal_type === "threat" ? T.clay : T.sage, textTransform: "uppercase", letterSpacing: "0.08em" }}>
+                      Viewed as a {entry.appraisal_type}
+                    </span>
+                  </div>
+                  {entry.perceived_resources?.length > 0 && (
+                    <p style={{ fontSize: 12, color: T.textSecondary }}>
+                      Resources felt: {entry.perceived_resources.join(", ")}
+                    </p>
+                  )}
+                  {entry.appraisal_reflection && (
+                    <p style={{ fontSize: 12, color: T.textSecondary, fontStyle: "italic", marginTop: 4 }}>
+                      "{entry.appraisal_reflection}"
+                    </p>
+                  )}
+                  <p style={{ fontSize: 10, color: T.textMuted, marginTop: 6 }}>Based on Lazarus & Folkman's Cognitive Appraisal Model (1984)</p>
+                </div>
               )}
             </div>
           ))}
