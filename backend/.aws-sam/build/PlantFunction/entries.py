@@ -3,6 +3,7 @@ import os
 import uuid
 import time
 from decimal import Decimal
+from datetime import datetime, timezone
 import boto3
 from boto3.dynamodb.conditions import Key
 
@@ -65,10 +66,9 @@ def create_entry(event):
     now = time.time()
     entry_id = str(uuid.uuid4())
 
-    from datetime import datetime, timezone
-    dt = datetime.now(timezone.utc)
-    date = dt.strftime('%Y-%m-%d')
-    entry_time = dt.strftime('%H:%M:%S')
+    # Use date/time sent from frontend (local timezone) instead of server UTC
+    date = body.get('date') or datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    entry_time = body.get('time') or datetime.now(timezone.utc).strftime('%H:%M:%S')
 
     item = {
         'user_id': user_id,
@@ -81,6 +81,10 @@ def create_entry(event):
         'triggers': body.get('triggers', []),
         'physical_signs': body.get('physical_signs', []),
         'notes': body.get('notes', ''),
+        'appraisal_type': body.get('appraisal_type', ''),
+        'perceived_resources': body.get('perceived_resources', []),
+        'appraisal_reflection': body.get('appraisal_reflection', ''),
+        'vulnerability_factors': body.get('vulnerability_factors', {}),
     }
 
     table.put_item(Item=item)
