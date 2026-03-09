@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 
 // ── Google Fonts ──────────────────────────────────────────────────────────────
 const FontLoader = () => (
@@ -677,6 +677,160 @@ const InsightsScreen = ({ entries }) => {
   const [insight, setInsight] = useState("");
   const [insightGenerated, setInsightGenerated] = useState(false);
 
+  const generateReport = () => {
+    const script = document.createElement("script");
+    script.src = "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js";
+    script.onload = () => buildPDF();
+    document.head.appendChild(script);
+  };
+
+  const buildPDF = () => {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+    const W = 210, margin = 20;
+    let y = 20;
+
+    const sage = [74, 124, 89], clay = [196, 132, 90], gray = [122, 116, 105], lightGray = [240, 237, 232];
+    const line = (yPos, color = lightGray) => { doc.setDrawColor(...color); doc.line(margin, yPos, W - margin, yPos); };
+    const sectionHeader = (text, yPos) => {
+      doc.setFillColor(...lightGray); doc.rect(margin, yPos - 5, W - margin * 2, 10, "F");
+      doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...sage);
+      doc.text(text.toUpperCase(), margin + 3, yPos + 1); return yPos + 12;
+    };
+
+    // ── Header ──
+    doc.setFillColor(...sage); doc.rect(0, 0, W, 32, "F");
+    doc.setFontSize(22); doc.setFont("helvetica", "bold"); doc.setTextColor(255, 255, 255);
+    doc.text("Wellnest", margin, 14);
+    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    doc.text("Wellness Pattern Summary", margin, 22);
+    const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+    doc.text(`Generated: ${today}`, W - margin, 22, { align: "right" });
+    y = 44;
+
+    // ── Disclaimer ──
+    doc.setFontSize(8); doc.setTextColor(...gray);
+    doc.text("This report is for informational purposes only and does not constitute a clinical diagnosis.", margin, y);
+    y += 12;
+
+    // ── Stats ──
+    const recentEntries = entries.slice(0, 30);
+    const avgStress = recentEntries.length ? (recentEntries.reduce((s, e) => s + Number(e.stress_level), 0) / recentEntries.length).toFixed(1) : "N/A";
+    const highestStress = recentEntries.length ? Math.max(...recentEntries.map(e => Number(e.stress_level))) : "N/A";
+    const lowestStress = recentEntries.length ? Math.min(...recentEntries.map(e => Number(e.stress_level))) : "N/A";
+    const threatCount = recentEntries.filter(e => e.appraisal_type === "threat").length;
+    const challengeCount = recentEntries.filter(e => e.appraisal_type === "challenge").length;
+
+    y = sectionHeader("Stress Overview", y);
+    const stats = [
+      ["Total check-ins", recentEntries.length],
+      ["Average stress level", `${avgStress} / 10`],
+      ["Highest recorded", `${highestStress} / 10`],
+      ["Lowest recorded", `${lowestStress} / 10`],
+    ];
+    doc.setFontSize(10); doc.setFont("helvetica", "normal");
+    stats.forEach(([label, val]) => {
+      doc.setTextColor(...gray); doc.text(label, margin + 2, y);
+      doc.setTextColor(44, 44, 44); doc.setFont("helvetica", "bold"); doc.text(String(val), W - margin - 2, y, { align: "right" });
+      doc.setFont("helvetica", "normal"); y += 8;
+    });
+    y += 6;
+
+    // ── Triggers ──
+    const triggerCounts = {};
+    recentEntries.forEach(e => (e.triggers || []).forEach(t => { triggerCounts[t] = (triggerCounts[t] || 0) + 1; }));
+    const topTriggers = Object.entries(triggerCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    if (topTriggers.length) {
+      y = sectionHeader("Top Stress Triggers", y);
+      topTriggers.forEach(([trigger, count], i) => {
+        doc.setTextColor(...gray); doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        doc.text(`${i + 1}. ${trigger}`, margin + 2, y);
+        doc.setTextColor(...clay); doc.setFont("helvetica", "bold");
+        doc.text(`${count}x`, W - margin - 2, y, { align: "right" });
+        doc.setFont("helvetica", "normal"); y += 8;
+      });
+      y += 6;
+    }
+
+    // ── Physical Signs ──
+    const signCounts = {};
+    recentEntries.forEach(e => (e.physical_signs || []).forEach(s => { signCounts[s] = (signCounts[s] || 0) + 1; }));
+    const topSigns = Object.entries(signCounts).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    if (topSigns.length) {
+      y = sectionHeader("Common Physical Signs", y);
+      topSigns.forEach(([sign, count]) => {
+        doc.setTextColor(...gray); doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+        doc.text(`• ${sign}`, margin + 2, y);
+        doc.setTextColor(...sage); doc.setFont("helvetica", "bold");
+        doc.text(`${count}x`, W - margin - 2, y, { align: "right" });
+        doc.setFont("helvetica", "normal"); y += 8;
+      });
+      y += 6;
+    }
+
+    // ── Appraisal ──
+    if (threatCount + challengeCount > 0) {
+      y = sectionHeader("Cognitive Appraisal Patterns", y);
+      doc.setFontSize(9); doc.setTextColor(...gray);
+      doc.text("Based on Lazarus & Folkman's Cognitive Appraisal Model (1984)", margin + 2, y); y += 8;
+      doc.setFontSize(10);
+      doc.setTextColor(196, 132, 90); doc.setFont("helvetica", "bold"); doc.text(`Threat appraisals: ${threatCount}`, margin + 2, y);
+      doc.setTextColor(74, 124, 89); doc.text(`Challenge appraisals: ${challengeCount}`, W / 2, y);
+      doc.setFont("helvetica", "normal"); y += 14;
+    }
+
+    // ── Vulnerability Factors ──
+    const vulnEntries = recentEntries.filter(e => e.vulnerability_factors && Object.keys(e.vulnerability_factors).length > 0);
+    if (vulnEntries.length) {
+      y = sectionHeader("Background Vulnerability Factors", y);
+      doc.setFontSize(9); doc.setTextColor(...gray);
+      doc.text("Based on McEwen's Allostatic Load Model (1998)", margin + 2, y); y += 9;
+      const factors = ["sleep", "meals", "conflict", "social_media"];
+      const labels = { sleep: "Sleep quality", meals: "Meals", conflict: "Interpersonal tension", social_media: "Social media" };
+      doc.setFontSize(10);
+      factors.forEach(f => {
+        const counts = { Fine: 0, Somewhat: 0, Significantly: 0 };
+        vulnEntries.forEach(e => { if (e.vulnerability_factors[f]) counts[e.vulnerability_factors[f]]++; });
+        if (counts.Fine + counts.Somewhat + counts.Significantly > 0) {
+          doc.setTextColor(...gray); doc.text(`${labels[f]}:`, margin + 2, y);
+          doc.setTextColor(44, 44, 44); doc.text(`Fine ${counts.Fine}x · Somewhat ${counts.Somewhat}x · Significantly ${counts.Significantly}x`, margin + 52, y);
+          y += 8;
+        }
+      });
+      y += 6;
+    }
+
+    // ── Notable Entries ──
+    const notable = recentEntries.filter(e => Number(e.stress_level) >= 7).slice(0, 4);
+    if (notable.length) {
+      if (y > 200) { doc.addPage(); y = 20; }
+      y = sectionHeader("Notable High-Stress Entries", y);
+      notable.forEach(e => {
+        if (y > 255) { doc.addPage(); y = 20; }
+        doc.setFillColor(253, 243, 238); doc.rect(margin, y - 4, W - margin * 2, 26, "F");
+        doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...clay);
+        doc.text(`${e.date}  ·  Stress: ${e.stress_level}/10  ·  Mood: ${e.mood}`, margin + 3, y + 2);
+        doc.setFont("helvetica", "normal"); doc.setTextColor(...gray);
+        if (e.triggers?.length) doc.text(`Triggers: ${e.triggers.join(", ")}`, margin + 3, y + 9);
+        if (e.notes) { const wrapped = doc.splitTextToSize(`"${e.notes}"`, W - margin * 2 - 6); doc.text(wrapped[0], margin + 3, y + 16); }
+        y += 32;
+      });
+    }
+
+    // ── Footer ──
+    const pageCount = doc.internal.getNumberOfPages();
+    for (let i = 1; i <= pageCount; i++) {
+      doc.setPage(i);
+      doc.setFillColor(...lightGray);
+      doc.rect(0, 284, W, 14, "F");
+      doc.setFontSize(8); doc.setTextColor(...gray);
+      doc.text("Wellnest · Personal Wellness Summary · Not a clinical diagnosis", margin, 291);
+      doc.text(`Page ${i} of ${pageCount}`, W - margin, 291, { align: "right" });
+    }
+
+    doc.save(`wellnest-report-${today.replace(/,?\s/g, "-")}.pdf`);
+  };
+
   const generateInsight = async () => {
     setInsightLoading(true);
     setInsight("");
@@ -902,18 +1056,21 @@ const InsightsScreen = ({ entries }) => {
 
       {/* Share with clinician */}
       <div className="card fade-up-5" style={{ background: T.parchmentDark, border: "none", textAlign: "center" }}>
-        <p style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 15, color: T.textSecondary, marginBottom: 14 }}>
+        <p style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 15, color: T.textSecondary, marginBottom: 6 }}>
           Working with a therapist or doctor?
         </p>
-        <button style={{
-          padding: "10px 24px", border: `1.5px solid ${T.sage}`, borderRadius: 10,
-          background: "transparent", color: T.sage, fontSize: 14, fontWeight: 600,
-          cursor: "pointer", fontFamily: "DM Sans, sans-serif",
+        <p style={{ fontSize: 13, color: T.textMuted, marginBottom: 16 }}>
+          Export a clean summary of your patterns to share at your next appointment.
+        </p>
+        <button onClick={generateReport} style={{
+          padding: "12px 24px", border: "none", borderRadius: 10,
+          background: T.sage, color: "white", fontSize: 14, fontWeight: 600,
+          cursor: "pointer", fontFamily: "DM Sans, sans-serif", width: "100%",
         }}>
-          Export report for care provider →
+          Download Clinician Report (PDF)
         </button>
         <p style={{ fontSize: 11, color: T.textMuted, marginTop: 10 }}>
-          Coming soon — a clean PDF summary of your patterns
+          Not a clinical diagnosis · For informational purposes only
         </p>
       </div>
     </div>
