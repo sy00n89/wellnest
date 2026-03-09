@@ -1,0 +1,146 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Wellnest Backend - Serverless wellness tracking API
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    Environment:
+      Variables:
+        ENTRIES_TABLE:
+          Ref: EntriesTable
+        PLANT_TABLE:
+          Ref: PlantTable
+        PATTERNS_TABLE:
+          Ref: PatternsTable
+  Api:
+    Cors:
+      AllowMethods: '''GET,POST,PUT,DELETE,OPTIONS'''
+      AllowHeaders: '''Content-Type,Authorization'''
+      AllowOrigin: '''*'''
+Resources:
+  EntriesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: wellnest-entries
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: user_id
+        AttributeType: S
+      - AttributeName: timestamp
+        AttributeType: N
+      KeySchema:
+      - AttributeName: user_id
+        KeyType: HASH
+      - AttributeName: timestamp
+        KeyType: RANGE
+  PlantTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: wellnest-plant
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: user_id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: user_id
+        KeyType: HASH
+  PatternsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: wellnest-patterns
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: user_id
+        AttributeType: S
+      - AttributeName: trigger
+        AttributeType: S
+      KeySchema:
+      - AttributeName: user_id
+        KeyType: HASH
+      - AttributeName: trigger
+        KeyType: RANGE
+  EntriesFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: wellnest-entries
+      CodeUri: EntriesFunction
+      Handler: entries.lambda_handler
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EntriesTable
+      Events:
+        GetEntries:
+          Type: Api
+          Properties:
+            Path: /entries
+            Method: GET
+        PostEntry:
+          Type: Api
+          Properties:
+            Path: /entries
+            Method: POST
+        DeleteEntry:
+          Type: Api
+          Properties:
+            Path: /entries/{id}
+            Method: DELETE
+    Metadata:
+      SamResourceId: EntriesFunction
+  PlantFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: wellnest-plant
+      CodeUri: PlantFunction
+      Handler: plant.lambda_handler
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: PlantTable
+      Events:
+        GetPlant:
+          Type: Api
+          Properties:
+            Path: /plant
+            Method: GET
+        PostPlant:
+          Type: Api
+          Properties:
+            Path: /plant
+            Method: POST
+        PutPlant:
+          Type: Api
+          Properties:
+            Path: /plant
+            Method: PUT
+    Metadata:
+      SamResourceId: PlantFunction
+  PatternsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: wellnest-patterns
+      CodeUri: PatternsFunction
+      Handler: patterns.lambda_handler
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: PatternsTable
+      Events:
+        GetPatterns:
+          Type: Api
+          Properties:
+            Path: /patterns
+            Method: GET
+        PostPattern:
+          Type: Api
+          Properties:
+            Path: /patterns
+            Method: POST
+    Metadata:
+      SamResourceId: PatternsFunction
+Outputs:
+  ApiUrl:
+    Description: API Gateway endpoint URL
+    Value:
+      Fn::Sub: https://${ServerlessRestApi}.execute-api.${AWS::Region}.amazonaws.com/Prod

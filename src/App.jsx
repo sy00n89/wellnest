@@ -890,24 +890,70 @@ const BottomNav = ({ current, onChange }) => (
   </div>
 );
 
+// ── API ───────────────────────────────────────────────────────────────────────
+const API_BASE = "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
+const USER_ID = "default";
+
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
   const [screen, setScreen] = useState("welcome");
-  const [entries, setEntries] = useState(MOCK_ENTRIES);
-  const [plantData, setPlantData] = useState(MOCK_PLANT);
+  const [entries, setEntries] = useState([]);
+  const [plantData, setPlantData] = useState(null);
+  const [loading, setLoading] = useState(false);
 
-  const handleBegin = () => setScreen("checkin");
-
-  const handleSubmitEntry = (entry) => {
-    setEntries(prev => [entry, ...prev]);
-    // Update plant stage based on total entries
-    const total = entries.length + 1;
-    const stage = total >= 20 ? "mature_tree" : total >= 14 ? "young_tree" : total >= 8 ? "plant" : total >= 3 ? "seedling" : "sprout";
-    setPlantData(prev => ({ ...prev, stage, check_ins: total, days_active: (prev?.days_active || 0) + 1 }));
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [entriesRes, plantRes] = await Promise.all([
+        fetch(`${API_BASE}/entries?user_id=${USER_ID}`),
+        fetch(`${API_BASE}/plant?user_id=${USER_ID}`),
+      ]);
+      const entriesData = await entriesRes.json();
+      const plantDataJson = await plantRes.json();
+      setEntries(Array.isArray(entriesData) ? entriesData : []);
+      setPlantData(plantDataJson);
+    } catch (err) {
+      console.error("Error loading data:", err);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleDelete = (id) => {
-    setEntries(prev => prev.filter(e => e.id !== id));
+  const handleBegin = () => {
+    loadData();
+    setScreen("checkin");
+  };
+
+  const handleSubmitEntry = async (entry) => {
+    try {
+      await fetch(`${API_BASE}/entries`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ...entry, user_id: USER_ID }),
+      });
+
+      // Save triggers as patterns
+      for (const trigger of (entry.triggers || [])) {
+        await fetch(`${API_BASE}/patterns`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ user_id: USER_ID, trigger, stress_level: entry.stress_level }),
+        });
+      }
+
+      await loadData();
+    } catch (err) {
+      console.error("Error saving entry:", err);
+    }
+  };
+
+  const handleDelete = async (id) => {
+    try {
+      await fetch(`${API_BASE}/entries/${id}?user_id=${USER_ID}`, { method: "DELETE" });
+      await loadData();
+    } catch (err) {
+      console.error("Error deleting entry:", err);
+    }
   };
 
   if (screen === "welcome") {
@@ -922,16 +968,24 @@ export default function App() {
     );
   }
 
+  const handleTabChange = (tab) => {
+    setScreen(tab);
+    loadData();
+  };
+
   return (
     <>
       <FontLoader />
       <GlobalStyles />
       <div className="wn-app wn-center" style={{ paddingBottom: 0 }}>
+        {loading && (
+          <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, background: T.sage, zIndex: 999, opacity: 0.8 }} />
+        )}
         {screen === "checkin" && <CheckInScreen onSubmit={handleSubmitEntry} />}
         {screen === "insights" && <InsightsScreen entries={entries} />}
         {screen === "history" && <HistoryScreen entries={entries} onDelete={handleDelete} />}
         {screen === "plant" && <PlantScreen plantData={plantData} entries={entries} />}
-        <BottomNav current={screen} onChange={setScreen} />
+        <BottomNav current={screen} onChange={handleTabChange} />
       </div>
     </>
   );
