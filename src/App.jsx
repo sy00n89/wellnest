@@ -475,7 +475,7 @@ const InsightsScreen = ({ entries }) => {
         `Date: ${e.date}, Time: ${e.time?.slice(0,5)}, Mood: ${e.mood}, Stress: ${e.stress_level}/10, Triggers: ${(e.triggers||[]).join(", ")||"none"}, Physical signs: ${(e.physical_signs||[]).join(", ")||"none"}, Notes: ${e.notes||"none"}`
       ).join("\n");
 
-      const prompt = `You are a warm, thoughtful wellness companion. A user has been tracking their stress and wellbeing. Here are their recent check-in entries:\n\n${entrySummary}\n\nBased on these entries, write a short personal insight narrative of 3-4 paragraphs. Your tone should be gentle, non-clinical, and observational — like a thoughtful friend noticing patterns. Highlight patterns in timing, triggers, physical signs, and any lighter moments. Do not give medical advice, diagnoses, or prescriptions. Do not use the word "streak". Frame everything as awareness and pattern recognition, not performance. Separate paragraphs with a blank line.`;
+      const prompt = `You are a warm, thoughtful wellness companion grounded in stress science. A user has been tracking their stress and wellbeing. Here are their recent check-in entries:\n\n${entrySummary}\n\nBased on these entries, write a structured insight report with exactly 5 sections. Each section must start with its label on its own line, followed by 2-3 sentences of content. Use this exact format:\n\nWHAT YOUR BODY IS SAYING\n[2-3 sentences about physical signs and what they signal. Grounded in Allostatic Load — the body accumulates stress before the mind recognizes it.]\n\nWHAT'S DRIVING IT\n[2-3 sentences identifying the key triggers and patterns. Grounded in Perceived Stress Theory — stress is shaped by what we perceive as threatening or uncontrollable.]\n\nHOW YOU'RE INTERPRETING IT\n[2-3 sentences on whether the user seems to be appraising situations as threats or challenges. Grounded in Cognitive Appraisal Theory by Lazarus and Folkman.]\n\nA MOMENT THAT HELPED\n[2-3 sentences identifying any lighter or calmer moments and what seemed to make them possible. Grounded in Behavioral Activation — certain behaviors buffer stress.]\n\nONE THING WORTH NOTICING\n[1-2 sentences. A single gentle observation the user can carry with them. Not advice — just awareness.]\n\nRules: Do not use markdown headers, bullet points, or asterisks. Do not give medical advice or diagnoses. Do not use the word streak. Write in plain warm sentences. Keep each section short and easy to read.`;
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -486,20 +486,29 @@ const InsightsScreen = ({ entries }) => {
           "anthropic-dangerous-direct-browser-access": "true",
         },
         body: JSON.stringify({
-          model: "claude-haiku-4-5-20251001",
+          model: "claude-sonnet-4-20250514",
           max_tokens: 1000,
           messages: [{ role: "user", content: prompt }],
         }),
       });
 
       const data = await response.json();
-      console.log("API response:", JSON.stringify(data));
       const text = data.content?.[0]?.text || "Unable to generate insight right now. Please try again.";
-      setInsight(text);
+
+      // Parse into sections
+      const sectionLabels = ["WHAT YOUR BODY IS SAYING", "WHAT'S DRIVING IT", "HOW YOU'RE INTERPRETING IT", "A MOMENT THAT HELPED", "ONE THING WORTH NOTICING"];
+      const sectionIcons = ["🫁", "🔍", "💭", "🌤️", "✦"];
+      const sectionColors = [T.clay, T.sage, T.sageMid, T.stressLow, T.textSecondary];
+
+      const parsed = sectionLabels.map((label, i) => {
+        const regex = new RegExp(`${label}\\s*\\n([\\s\\S]*?)(?=${sectionLabels.slice(i+1).map(l => l.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|')}|$)`, 'i');
+        const match = text.match(regex);
+        return { label, icon: sectionIcons[i], color: sectionColors[i], content: match ? match[1].trim() : "" };
+      }).filter(s => s.content);
+
+      setInsight(parsed.length > 0 ? parsed : text);
     } catch (err) {
-      const errorText = await err.response?.text?.() || err.message;
       console.error("Insight error:", err);
-      console.error("Error details:", errorText);
       setInsight("Something went wrong generating your insight. Please try again.");
     }
 
@@ -558,17 +567,37 @@ const InsightsScreen = ({ entries }) => {
 
         {insightLoading ? (
           <div>
-            {[100, 85, 92, 60].map((w, i) => (
+            {[100, 85, 92, 60, 75].map((w, i) => (
               <div key={i} className="shimmer" style={{ height: 14, borderRadius: 7, marginBottom: 10, width: `${w}%` }} />
             ))}
           </div>
         ) : insight ? (
           <div>
-            {insight.split("\n\n").map((para, i) => (
-              <p key={i} style={{ fontSize: 15, color: T.textPrimary, lineHeight: 1.75, marginBottom: i < insight.split("\n\n").length - 1 ? 14 : 0 }}>
-                {para}
-              </p>
-            ))}
+            {Array.isArray(insight) ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {insight.map((section, i) => (
+                  <div key={i} style={{ borderLeft: `3px solid ${section.color}`, paddingLeft: 14 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                      <span style={{ fontSize: 13 }}>{section.icon}</span>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: section.color, textTransform: "uppercase", letterSpacing: "0.1em" }}>
+                        {section.label}
+                      </p>
+                    </div>
+                    <p style={{ fontSize: 14, color: T.textPrimary, lineHeight: 1.75 }}>
+                      {section.content}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div>
+                {insight.split("\n\n").map((para, i) => (
+                  <p key={i} style={{ fontSize: 15, color: T.textPrimary, lineHeight: 1.75, marginBottom: 14 }}>
+                    {para}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
           <div style={{ textAlign: "center", padding: "16px 0" }}>
