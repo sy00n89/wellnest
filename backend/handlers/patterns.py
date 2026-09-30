@@ -4,7 +4,7 @@ from decimal import Decimal
 import boto3
 from boto3.dynamodb.conditions import Key
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
 table = dynamodb.Table(os.environ['PATTERNS_TABLE'])
 
 class DecimalEncoder(json.JSONEncoder):
