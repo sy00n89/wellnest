@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState } from "react";
 
 // ── Google Fonts ──────────────────────────────────────────────────────────────
 const FontLoader = () => (
@@ -463,8 +463,6 @@ const CheckInScreen = ({ onSubmit, entries = [] }) => {
     };
 
     const todayStr = localDateStr(new Date());
-    const yesterdayDate = new Date(); yesterdayDate.setDate(yesterdayDate.getDate() - 1);
-    const yesterdayStr = localDateStr(yesterdayDate);
 
     const todayEntries = entries.filter(e => e.date === todayStr);
 
@@ -783,7 +781,6 @@ const InsightsScreen = ({ entries }) => {
     let y = 20;
 
     const sage = [74, 124, 89], clay = [196, 132, 90], gray = [122, 116, 105], lightGray = [240, 237, 232];
-    const line = (yPos, color = lightGray) => { doc.setDrawColor(...color); doc.line(margin, yPos, W - margin, yPos); };
     const sectionHeader = (text, yPos) => {
       doc.setFillColor(...lightGray); doc.rect(margin, yPos - 5, W - margin * 2, 10, "F");
       doc.setFontSize(9); doc.setFont("helvetica", "bold"); doc.setTextColor(...sage);
@@ -1261,7 +1258,7 @@ const moodColor = {
 };
 
 const HistoryScreen = ({ entries, onDelete }) => {
-  const [filter, setFilter] = useState("");
+  const [filter] = useState("");
 
   const filtered = entries
     .filter(e => !filter || e.date >= filter)
@@ -1399,7 +1396,7 @@ const STAGE_DESC = {
 const STAGE_THRESHOLDS = [0, 5, 12, 22, 35];
 const STAGE_NEXT = [5, 12, 22, 35, 35];
 
-const PlantScreen = ({ plantData, entries }) => {
+const PlantScreen = ({ entries }) => {
   // ── Behavioral Reinforcement Metrics ──────────────────────────────────────
   const totalCheckIns = entries.length;
 
@@ -1569,7 +1566,7 @@ const BottomNav = ({ current, onChange }) => (
 );
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
 const USER_ID = "default";
 
 // ── Main App ──────────────────────────────────────────────────────────────────

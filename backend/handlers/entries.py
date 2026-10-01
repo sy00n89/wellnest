@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 import boto3
 from boto3.dynamodb.conditions import Key
 
-dynamodb = boto3.resource('dynamodb')
+dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
 
 class DecimalEncoder(json.JSONEncoder):
@@ -120,6 +120,9 @@ def delete_entry(event):
     table.delete_item(
         Key={'user_id': user_id, 'timestamp': entry['timestamp']}
     )
+
+    # Update plant after delete
+    update_plant(user_id)
 
     return {
         'statusCode': 200,
