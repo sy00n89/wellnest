@@ -1569,7 +1569,7 @@ const BottomNav = ({ current, onChange }) => (
 );
 
 // ── API ───────────────────────────────────────────────────────────────────────
-const API_BASE = "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
+const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
 const USER_ID = "default";
 
 // ── Main App ──────────────────────────────────────────────────────────────────
