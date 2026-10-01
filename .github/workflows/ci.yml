@@ -1,8 +1,10 @@
-# Runs on every push and pull request. If any step fails, the run is red.
+# Runs on pull requests, and on pushes to main. If any step fails, the run is red.
+# (Running on every push as well would test each PR commit twice.)
 name: CI
 
 on:
   push:
+    branches: [main]
   pull_request:
 
 jobs:
