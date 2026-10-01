@@ -121,6 +121,9 @@ def delete_entry(event):
         Key={'user_id': user_id, 'timestamp': entry['timestamp']}
     )
 
+    # Update plant after delete
+    update_plant(user_id)
+
     return {
         'statusCode': 200,
         'headers': cors_headers(),
