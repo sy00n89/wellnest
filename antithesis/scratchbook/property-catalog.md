@@ -185,14 +185,14 @@ write. Nothing user-visible reads them today.
 | | |
 |---|---|
 | **Type** | Safety |
-| **Property** | For a private user, at quiescence, each trigger's frequency is at least the number of acked creates that included it and whose pattern POSTs were acked, and at most the number of create attempts (acked, unknown, or failed) that included it. |
-| **Invariant** | Workload `Always(lower_T <= freq_T <= upper_T, "pattern frequency tracks triggers")`. Counted as an all-time tally (deletes don't reduce the expected value), matching current code. The upper bound includes failed creates on purpose, because the browser posts patterns even when the entry POST fails; a separate `Sometimes` in the details reports when a pattern was counted for an entry that doesn't exist. |
+| **Property** | For a private user, at quiescence, each trigger's frequency reflects the user's *current* entries: at least the number of live acked entries that include it (pattern POSTs acked), and at most the number of create attempts that included it (acked, unknown, or failed) minus the deletes of entries that included it. |
+| **Invariant** | Workload `Always(lower_T <= freq_T <= upper_T, "pattern frequency tracks triggers")`. Deletes reduce the expected value (owner decision 2026-10-05: trigger counts go down on delete). `entries.decrement_patterns` (added 2026-10-05, with pytest `test_delete_lowers_trigger_counts`) lowers each trigger on delete and removes rows that reach zero. The upper bound includes failed creates on purpose, because the browser posts patterns even when the entry POST fails; a separate `Sometimes` in the details reports when a pattern was counted for an entry that doesn't exist. |
 | **Antithesis Angle** | Fails on the lower bound through lost increments, and through a fault between the entry POST and the pattern POSTs (the browser-driven second write never arrives). |
 | **Why It Matters** | The two tables drift with no reconciliation. |
 
 **Open Questions:**
 
-- Should deleting an entry decrement its patterns (tally vs. current state)? If yes, the expected value subtracts deletes and the property fails today on the first delete. `(needs human input)`
+- None. (Resolved 2026-10-05: owner decided trigger counts go down on delete.)
 
 ### plant-update-never-fails-silently — The swallowed plant-update error is never hit
 
@@ -202,7 +202,7 @@ write. Nothing user-visible reads them today.
 | **Property** | `entries.update_plant` never reaches its `except` branch after the entry write succeeded. |
 | **Invariant** | SUT-side `Unreachable("update_plant failed after entry write", {error})` inside the `except` in `backend/handlers/entries.py`. Missing today. |
 | **Antithesis Angle** | Requires a dynamodb fault that outlasts botocore's retries (60 s timeouts, up to 10 attempts by default) between the two writes. With defaults, short faults look like slow successes, so this may pass without being exercised. |
-| **Why It Matters** | A swallowed error is invisible to every other check. |
+| **Why It Matters** | A swallowed error is invisible to every other check. On AWS this branch ran on *every* create until 2026-10-05: `template.yaml` gave the entries Lambda access to the entries table only, so its plant write was denied and silently swallowed (fixed by granting plant and patterns access). |
 
 **Open Questions:**
 

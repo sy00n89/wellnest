@@ -32,3 +32,6 @@ botocore defaults verified in `backend/.venv` (botocore 1.43.106): 60 s connect 
 - Found: no explicit retry/timeout configuration; defaults are 60 s timeouts, legacy mode, 10 attempts for DynamoDB.
 - Not found: typical fault durations in Antithesis runs.
 - Conclusion: `(needs human input)`.
+
+## Production finding (2026-10-05)
+`backend/template.yaml` gave `EntriesFunction` a `DynamoDBCrudPolicy` for `EntriesTable` only, yet `update_plant` writes `PlantTable`. On AWS that `put_item` would be denied, and the `except` would swallow it on every create and delete, so the deployed plant table would never be updated by check-ins. Based on the template (the live stack was not inspected). Fixed by adding CRUD policies for `PlantTable` and `PatternsTable` to `EntriesFunction`. This is a concrete example of the failure class this property guards.

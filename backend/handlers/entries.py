@@ -121,14 +121,40 @@ def delete_entry(event):
         Key={'user_id': user_id, 'timestamp': entry['timestamp']}
     )
 
-    # Update plant after delete
+    # Update plant and trigger counts after delete
     update_plant(user_id)
+    decrement_patterns(user_id, entry.get('triggers', []))
 
     return {
         'statusCode': 200,
         'headers': cors_headers(),
         'body': json.dumps({'message': 'Entry deleted'})
     }
+
+def decrement_patterns(user_id, triggers):
+    """Lower each trigger's frequency by one; remove the row when it reaches zero."""
+    try:
+        patterns_table = dynamodb.Table(os.environ['PATTERNS_TABLE'])
+        for trigger in triggers:
+            key = {'user_id': user_id, 'trigger': trigger}
+            try:
+                result = patterns_table.update_item(
+                    Key=key,
+                    UpdateExpression='ADD frequency :minus_one',
+                    ConditionExpression='attribute_exists(frequency)',
+                    ExpressionAttributeValues={':minus_one': Decimal(-1)},
+                    ReturnValues='UPDATED_NEW',
+                )
+            except patterns_table.meta.client.exceptions.ConditionalCheckFailedException:
+                continue  # no pattern row for this trigger
+            if result['Attributes']['frequency'] <= 0:
+                patterns_table.delete_item(
+                    Key=key,
+                    ConditionExpression='frequency <= :zero',
+                    ExpressionAttributeValues={':zero': Decimal(0)},
+                )
+    except Exception as e:
+        print(f"Pattern decrement error: {e}")
 
 # Every 20 check-ins grows the plant one stage. Keep in sync with
 # STAGE_THRESHOLDS in src/App.jsx.

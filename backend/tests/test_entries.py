@@ -1,4 +1,5 @@
 import entries
+import patterns
 import plant
 from conftest import call
 
@@ -45,3 +46,22 @@ def test_delete_updates_plant():
     assert p['check_ins'] == 1
     # says check_ins == 1.
     pass
+
+
+def test_delete_lowers_trigger_counts():
+    # Like the browser: create the entry, then post each trigger to /patterns.
+    def check_in(triggers):
+        _, created = call(entries, 'POST', {'mood': 'okay', 'triggers': triggers})
+        for trigger in triggers:
+            call(patterns, 'POST', {'trigger': trigger, 'stress_level': 5})
+        return created['id']
+
+    check_in(['work'])
+    entry_id = check_in(['work', 'sleep'])
+
+    status, _ = call(entries, 'DELETE', path_id=entry_id)
+    assert status == 200
+
+    _, counts = call(patterns, 'GET')
+    frequency = {p['trigger']: p['frequency'] for p in counts}
+    assert frequency == {'work': 1}  # 'sleep' reached zero and was removed

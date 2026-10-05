@@ -20,7 +20,7 @@ Scenario 3 is deterministic: the first delete of an entry with triggers fails it
 Workload `Always` at quiescence. Missing today.
 
 ## Open questions
-- Is "delete doesn't decrement patterns" intended (all-time tally)? `(needs human input)`
+- None (resolved 2026-10-05, see Investigation Log).
 
 ### Investigation Log
 
@@ -29,6 +29,7 @@ Workload `Always` at quiescence. Missing today.
 - Found: the learning plan lists it as drift, implying a bug. No code comment either way.
 - Not found: a product spec.
 - Conclusion: `(needs human input)`. Leaning bug per the learning plan.
+- Update 2026-10-05: owner decided trigger counts go down on delete. Confirmed bug: `entries.delete_entry` never touches the patterns table. Expected value now subtracts deletes. Fixed the same day: `entries.decrement_patterns` runs after delete (atomic `ADD frequency -1`, row removed at zero), covered by pytest `test_delete_lowers_trigger_counts` (verified red on the old code). Remaining failure paths are the fault- and race-driven ones.
 
 ## Evaluation update (2026-10-05) — reformulated
 The original equality failed by construction on the first delete (patterns never decrement). Now an all-time tally with bounds: lower = acked creates containing T whose pattern POSTs were acked; upper = all create attempts containing T (acked, unknown, failed), because the browser posts patterns even after a failed entry POST. Whether delete should decrement remains a human question.

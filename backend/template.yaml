@@ -82,6 +82,11 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntriesTable
+        # entries.py also updates the plant and trigger counts
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PlantTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref PatternsTable
       Events:
         GetEntries:
           Type: Api

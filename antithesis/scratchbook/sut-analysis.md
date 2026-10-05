@@ -209,6 +209,7 @@ Anthropic.
   and returns 500 with `str(e)`. Malformed JSON, a missing body (`json.loads(None)`
   in `create_entry` when the body is empty), non-numeric `stress_level`
   (`Decimal('abc')`), and dynamodb errors all become 500.
+- **IAM gap (fixed 2026-10-05).** `template.yaml` gave the entries Lambda access to the entries table only, so on AWS `update_plant`'s write to the plant table would be denied and swallowed on every create. Now granted plant and patterns access.
 - **Swallowed plant failure.** `entries.update_plant` catches every exception and
   only `print`s. The create still returns 201, leaving the plant stale. Nothing
   signals it.
