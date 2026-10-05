@@ -15,5 +15,5 @@ COPY --chown=app:app handlers/ handlers/
 
 EXPOSE 8080
 
-CMD ["sh", "-c", "python create_tables.py && uvicorn server:app --host 0.0.0.0 --port 8080"]
+CMD ["sh", "-c", "python create_tables.py && exec uvicorn server:app --host 0.0.0.0 --port 8080"]
 
