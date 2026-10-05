@@ -22,3 +22,10 @@ services:
     depends_on:
       - dynamodb
       - anthropic-mock
+
+  frontend:
+    build: .
+    ports:
+      - "8081:80"
+    depends_on:
+      - api
