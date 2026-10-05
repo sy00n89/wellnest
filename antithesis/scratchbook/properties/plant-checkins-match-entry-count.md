@@ -18,7 +18,7 @@ Only meaningful at quiescence. Check in a `finally_`/`eventually_` command or in
 Workload `Always` at quiescence. SUT-side: see `plant-update-never-fails-silently`. Missing today.
 
 ## Open questions
-- Workload must not call `POST`/`PUT /plant` `(needs human input)`
+- None (resolved 2026-10-05, see Investigation Log).
 
 ### Investigation Log
 
@@ -27,3 +27,4 @@ Workload `Always` at quiescence. SUT-side: see `plant-update-never-fails-silentl
 - Found: the frontend only calls `GET /plant`. `POST`/`PUT /plant` accept arbitrary `check_ins`, so any call breaks the invariant by construction.
 - Not found: any documented consumer of `POST`/`PUT /plant`.
 - Conclusion: recommend excluding them from the workload; the owner should confirm the endpoints are not meant to be used. `(needs human input)`
+- Update 2026-10-05: owner confirmed the plant must only update automatically from the entry count. Resolved; the workload never calls `POST`/`PUT /plant`.

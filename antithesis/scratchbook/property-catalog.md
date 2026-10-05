@@ -53,12 +53,10 @@ guards and coverage guidance.
   *unknown* (5xx, timeout, connection reset). Properties use bounds:
   `acked ⊆ listed ⊆ acked ∪ unknown`, and for counters `F + K ≤ value ≤ F + K + U`.
 - **29 s client timeout** on every request, matching API Gateway's integration limit.
-- **Users.** Each `parallel_driver_` run owns private user ids and creates overlap with
-  threads inside the run that share one in-process model. One driver deliberately
-  shares the user `default` (evaluation bias B-1). Several such runs can overlap with
-  separate models, so on `default` only per-response checks run (unique ids,
-  isolation, stage rule, no 500, latency, read availability); the acked and quiescent
-  properties apply only to private users.
+- **Users.** Every user has their own journal (owner decision 2026-10-05; the
+  frontend now gives each browser its own id). Each `parallel_driver_` run owns
+  private user ids and creates overlap with threads inside the run that share one
+  in-process model. The workload never uses `default`.
 
 ## Category: Entry data integrity
 
@@ -152,21 +150,21 @@ write. Nothing user-visible reads them today.
 
 **Open Questions:**
 
-- The workload must not call `POST`/`PUT /plant`, or this fails by construction. `(needs human input)`
+- None. (Resolved 2026-10-05: owner decided the plant is only updated automatically; the workload never calls `POST`/`PUT /plant`.)
 
 ### plant-stage-matches-checkins — Plant stage follows the server rule (guard)
 
 | | |
 |---|---|
 | **Type** | Safety |
-| **Property** | `GET /plant` `stage` equals the server's threshold function of `check_ins` (≥20 mature_tree, ≥14 young_tree, ≥8 plant, ≥3 seedling, else sprout). |
+| **Property** | `GET /plant` `stage` equals the server's threshold function of `check_ins`: one stage per 20 check-ins (≥80 mature_tree, ≥60 young_tree, ≥40 plant, ≥20 seedling, else sprout). |
 | **Invariant** | Workload `Always(stage == expected_stage(check_ins), "plant stage matches count")` on every plant read. |
 | **Antithesis Angle** | Cannot fail while stage and count come from one `put_item`; guards future split writes. |
-| **Why It Matters** | The client uses a different rule; this only checks server self-consistency. |
+| **Why It Matters** | The plant screen now displays the server's stage directly, so a wrong stage is user-visible. |
 
 **Open Questions:**
 
-- Should the server and client stage rules be reconciled? Product decision. `(needs human input)`
+- None. (Resolved 2026-10-05: owner chose 20 check-ins per stage; the frontend now shows the server's plant.)
 
 ### pattern-increments-not-lost — Concurrent pattern updates are not lost
 
@@ -363,8 +361,8 @@ These confirm the run reached the states the safety properties depend on.
 | | |
 |---|---|
 | **Type** | Liveness |
-| **Property** | Some user's plant reaches `plant` stage (≥8 check-ins) or later. |
-| **Invariant** | Workload `Sometimes(stage in {plant, young_tree, mature_tree}, "plant reaches later stage")`. |
+| **Property** | Some user's plant reaches `seedling` stage (≥20 check-ins) or later. |
+| **Invariant** | Workload `Sometimes(stage != "sprout", "plant reaches later stage")`. With 20 check-ins per stage, the workload must create 20+ entries for at least one user. |
 | **Antithesis Angle** | Ensures enough writes per user to cross stage thresholds under faults. |
 | **Why It Matters** | Stage logic only runs when counts grow. |
 
@@ -383,7 +381,7 @@ These confirm the run reached the states the safety properties depend on.
 ## Assumptions
 
 - Antithesis compose runs the api with `--workers 4`.
-- The workload mirrors the browser, uses a 29 s timeout, and never calls `POST`/`PUT /plant`.
+- The workload mirrors the browser, uses a 29 s timeout, and never calls `POST`/`PUT /plant` (owner decision: plant updates are automatic only).
 - Pagination (≥1 MB per user) is excluded: cheap to trigger and deterministic, so it belongs in an integration test, not the Antithesis search budget.
 - Eventual consistency of real DynamoDB queries is not modelled (dynamodb-local can't reproduce it).
 
@@ -392,5 +390,4 @@ These confirm the run reached the states the safety properties depend on.
 - Is clock jitter enabled for the tenant? `(needs human input)`
 - Is node termination enabled for the tenant? `(needs human input)`
 - Lower botocore retries/timeouts in the Antithesis env so dynamodb faults surface within fault windows? `(needs human input)`
-- Target model: today's single shared `default` user, or the planned multi-user product? Default: one shared-user driver plus private-user drivers (evaluation bias B-1). `(needs human input)`
 - Weight the workload toward confirming the known bugs, or toward the new-discovery properties (evaluation bias B-2)? `(needs human input)`

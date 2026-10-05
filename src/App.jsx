@@ -1372,10 +1372,12 @@ const STAGE_DESC = {
 };
 
 // Stage thresholds based on engagement depth (not consecutive days)
-const STAGE_THRESHOLDS = [0, 5, 12, 22, 35];
-const STAGE_NEXT = [5, 12, 22, 35, 35];
+// Check-ins needed to reach each stage. Keep in sync with
+// PLANT_STAGE_THRESHOLDS in backend/handlers/entries.py.
+const STAGE_THRESHOLDS = [0, 20, 40, 60, 80];
+const STAGE_NEXT = [20, 40, 60, 80, 80];
 
-const PlantScreen = ({ entries }) => {
+const PlantScreen = ({ plantData, entries }) => {
   // ── Behavioral Reinforcement Metrics ──────────────────────────────────────
   const totalCheckIns = entries.length;
 
@@ -1398,18 +1400,15 @@ const PlantScreen = ({ entries }) => {
   });
   const gentleDays = Object.values(dayStress).filter(stresses => Math.max(...stresses) <= 4).length;
 
-  // Engagement depth score drives plant growth
-  const engagementScore = totalCheckIns + (hardDayFollowUps * 2) + gentleDays;
-  const stage = engagementScore >= 35 ? "mature_tree"
-    : engagementScore >= 22 ? "young_tree"
-    : engagementScore >= 12 ? "plant"
-    : engagementScore >= 5 ? "seedling"
-    : "sprout";
+  // Plant growth comes from the server, which recounts check-ins on every
+  // create and delete.
+  const plantCheckIns = Number(plantData?.check_ins ?? 0);
+  const stage = PLANT_STAGES.includes(plantData?.stage) ? plantData.stage : "sprout";
   const stageIdx = PLANT_STAGES.indexOf(stage);
   const currentThreshold = STAGE_THRESHOLDS[stageIdx];
   const nextThreshold = STAGE_NEXT[stageIdx];
   const progressPct = stageIdx === 4 ? 100
-    : Math.round(((engagementScore - currentThreshold) / (nextThreshold - currentThreshold)) * 100);
+    : Math.min(100, Math.max(0, Math.round(((plantCheckIns - currentThreshold) / (nextThreshold - currentThreshold)) * 100)));
 
   return (
     <div className="wn-page">
@@ -1546,7 +1545,22 @@ const BottomNav = ({ current, onChange }) => (
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
-const USER_ID = "default";
+// Each browser gets its own journal: a random id kept in localStorage. If
+// storage is unavailable, the id lasts only for this page load.
+const getUserId = () => {
+  const newId = () => (crypto.randomUUID?.() ?? `user-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  try {
+    let id = localStorage.getItem("wellnest-user-id");
+    if (!id) {
+      id = newId();
+      localStorage.setItem("wellnest-user-id", id);
+    }
+    return id;
+  } catch {
+    return newId();
+  }
+};
+const USER_ID = getUserId();
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {

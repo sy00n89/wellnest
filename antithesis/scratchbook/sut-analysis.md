@@ -276,8 +276,9 @@ insights reflect it. User-visible failures that matter most:
   it serializes what Lambda parallelizes, and it has no 29 s deadline. A green
   Antithesis run against the committed shim would create false confidence on exactly
   the properties that matter most.
-- **Everyone is `default` in production.** The frontend hardcodes one user id, so all
-  real traffic shares one partition and collision risk scales with total app traffic.
+- **Everyone was `default` in production.** The frontend hardcoded one user id, so all
+  real traffic shared one partition. Owner decision 2026-10-05: each user has their
+  own journal; the frontend now assigns a random per-browser id (localStorage).
 - **Derived state with no reader.** The plant and patterns tables are maintained on
   every write but nothing user-visible reads them. Their correctness is still worth
   testing (the API exposes them and they are the obvious basis for future features),

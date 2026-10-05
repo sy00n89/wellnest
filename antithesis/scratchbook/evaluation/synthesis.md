@@ -65,6 +65,8 @@ second evaluation pass needed per `property-evaluation.md`.
   learning exercise (confirm known bugs first), or weight the workload toward the
   new-discovery properties.
 
+- **Owner decision 2026-10-05 on B-1:** every user has their own journal. The frontend now assigns a per-browser id; the workload uses private users only.
+
 ## Not acted on
 
 - Severity blend RMW (W-3): no property checks severity; low value. Noted only.

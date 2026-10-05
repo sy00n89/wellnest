@@ -130,6 +130,22 @@ def delete_entry(event):
         'body': json.dumps({'message': 'Entry deleted'})
     }
 
+# Every 20 check-ins grows the plant one stage. Keep in sync with
+# STAGE_THRESHOLDS in src/App.jsx.
+PLANT_STAGE_THRESHOLDS = [
+    (80, 'mature_tree'),
+    (60, 'young_tree'),
+    (40, 'plant'),
+    (20, 'seedling'),
+]
+
+def plant_stage(total):
+    """Return the plant stage for a number of check-ins."""
+    for threshold, stage in PLANT_STAGE_THRESHOLDS:
+        if total >= threshold:
+            return stage
+    return 'sprout'
+
 def update_plant(user_id):
     """Update plant stage based on total entries"""
     try:
@@ -141,21 +157,9 @@ def update_plant(user_id):
         )
         total = len(response.get('Items', []))
 
-        # Determine stage
-        if total >= 20:
-            stage = 'mature_tree'
-        elif total >= 14:
-            stage = 'young_tree'
-        elif total >= 8:
-            stage = 'plant'
-        elif total >= 3:
-            stage = 'seedling'
-        else:
-            stage = 'sprout'
-
         plant_table.put_item(Item={
             'user_id': user_id,
-            'stage': stage,
+            'stage': plant_stage(total),
             'check_ins': Decimal(str(total)),
         })
     except Exception as e:

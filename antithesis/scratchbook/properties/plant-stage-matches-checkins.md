@@ -12,7 +12,7 @@ Low expected yield: both fields come from one write. Guard against future split 
 Workload `Always`. Missing today.
 
 ## Open questions
-- Reconcile server and client stage rules? Product decision. `(needs human input)`
+- None (resolved 2026-10-05, see Investigation Log).
 
 ### Investigation Log
 
@@ -21,6 +21,7 @@ Workload `Always`. Missing today.
 - Found: the client rule was introduced deliberately with the Behavioral Activation feature; the server rule predates it. No comment says which is authoritative.
 - Not found: any doc stating intended behavior.
 - Conclusion: `(needs human input)`. The property checks server self-consistency only.
+- Update 2026-10-05: owner chose one stage per 20 check-ins (20/40/60/80). Backend `plant_stage()` implements it; `PlantScreen` now displays the server's stage. Resolved.
 
 ## Evaluation update (2026-10-05)
 Kept as a P2 regression guard evaluated on reads the workload already makes; cannot fail against current code.

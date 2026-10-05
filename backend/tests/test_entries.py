@@ -18,7 +18,19 @@ def test_plant_counts_check_ins():
 
     _, p = call(plant, 'GET')
     assert p['check_ins'] == 3
-    assert p['stage'] == 'seedling'
+    assert p['stage'] == 'sprout'
+
+
+def test_plant_stage_every_20_check_ins():
+    expected = {
+        0: 'sprout', 19: 'sprout',
+        20: 'seedling', 39: 'seedling',
+        40: 'plant', 59: 'plant',
+        60: 'young_tree', 79: 'young_tree',
+        80: 'mature_tree', 200: 'mature_tree',
+    }
+    for total, stage in expected.items():
+        assert entries.plant_stage(total) == stage, total
 
 
 def test_delete_updates_plant():
