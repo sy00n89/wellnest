@@ -15,6 +15,7 @@ from fastapi import FastAPI, Request, Response
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'handlers'))
 
 import entries  # noqa: E402
+import insights  # noqa: E402
 import patterns  # noqa: E402
 import plant  # noqa: E402
 
@@ -23,6 +24,7 @@ ROUTES = {
     'entries': entries,
     'plant': plant,
     'patterns': patterns,
+    'insights': insights,
 }
 
 app = FastAPI()

@@ -1,19 +1,24 @@
+services:
+  dynamodb:
+    image: amazon/dynamodb-local
 
-  services:
-    dynamodb:
-      image: amazon/dynamodb-local
+  anthropic-mock:
+    build: ./mocks/anthropic
 
-    api:
-      build: ./backend
-      environment:
-        DYNAMODB_ENDPOINT: http://dynamodb:8000
-        ENTRIES_TABLE: wellnest-entries
-        PLANT_TABLE: wellnest-plant
-        PATTERNS_TABLE: wellnest-patterns
-        AWS_DEFAULT_REGION: us-east-1
-        AWS_ACCESS_KEY_ID: local
-        AWS_SECRET_ACCESS_KEY: local
-      ports:
-        - "8080:8080"
-      depends_on:
-        - dynamodb
+  api:
+    build: ./backend
+    environment:
+      DYNAMODB_ENDPOINT: http://dynamodb:8000
+      ENTRIES_TABLE: wellnest-entries
+      PLANT_TABLE: wellnest-plant
+      PATTERNS_TABLE: wellnest-patterns
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      ANTHROPIC_BASE_URL: http://anthropic-mock:8080
+      ANTHROPIC_API_KEY: not-a-real-key
+    ports:
+      - "8080:8080"
+    depends_on:
+      - dynamodb
+      - anthropic-mock

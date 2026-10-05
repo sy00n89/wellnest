@@ -925,37 +925,16 @@ const InsightsScreen = ({ entries }) => {
     setInsight("");
 
     try {
-      // Build a structured summary of the user's recent entries
-      const recentEntries = entries.slice(0, 14);
-
-      const entrySummary = recentEntries.map(e => {
-        const base = `Date: ${e.date}, Mood: ${e.mood}, Stress: ${e.stress_level}/10, Triggers: ${(e.triggers||[]).join(", ")||"none"}, Physical signs: ${(e.physical_signs||[]).join(", ")||"none"}, Notes: ${e.notes||"none"}`;
-        const appraisal = e.appraisal_type ? `, Appraisal: viewed as a ${e.appraisal_type}, Resources felt: ${(e.perceived_resources||[]).join(", ")||"none"}${e.appraisal_reflection ? `, Reflection: "${e.appraisal_reflection}"` : ""}` : "";
-        const vuln = e.vulnerability_factors && Object.keys(e.vulnerability_factors).length > 0
-          ? `, Background factors: ${Object.entries(e.vulnerability_factors).map(([k,v]) => `${k}: ${v}`).join(", ")}`
-          : "";
-        return base + appraisal + vuln;
-      }).join("\n");
-
-      const prompt = `You are a warm, thoughtful wellness companion grounded in stress science. A user has been tracking their stress and wellbeing. Here are their recent check-in entries:\n\n${entrySummary}\n\nBased on these entries, write a structured insight report with exactly 5 sections. Each section must start with its label on its own line, followed by 2-3 sentences of content. Use this exact format:\n\nWHAT YOUR BODY IS SAYING\n[2-3 sentences about physical signs and what they signal. Grounded in Allostatic Load — the body accumulates stress before the mind recognizes it.]\n\nWHAT'S DRIVING IT\n[2-3 sentences identifying the key triggers and patterns. Grounded in Perceived Stress Theory — stress is shaped by what we perceive as threatening or uncontrollable.]\n\nHOW YOU'RE INTERPRETING IT\n[2-3 sentences on whether the user seems to be appraising situations as threats or challenges. Grounded in Cognitive Appraisal Theory by Lazarus and Folkman.]\n\nA MOMENT THAT HELPED\n[2-3 sentences identifying any lighter or calmer moments and what seemed to make them possible. Grounded in Behavioral Activation — certain behaviors buffer stress.]\n\nONE THING WORTH NOTICING\n[1-2 sentences. A single gentle observation the user can carry with them. Not advice — just awareness.]\n\nRules: Do not use markdown headers, bullet points, or asterisks. Do not give medical advice or diagnoses. Do not use the word streak. Write in plain warm sentences. Keep each section short and easy to read.`;
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      // The backend reads the entries, builds the prompt, and calls Anthropic,
+      // so the API key never reaches the browser.
+      const response = await fetch(`${API_BASE}/insights`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: USER_ID }),
       });
 
       const data = await response.json();
-      const text = data.content?.[0]?.text || "Unable to generate insight right now. Please try again.";
+      const text = data.text || "Unable to generate insight right now. Please try again.";
 
       // Parse into sections
       const sectionLabels = ["WHAT YOUR BODY IS SAYING", "WHAT'S DRIVING IT", "HOW YOU'RE INTERPRETING IT", "A MOMENT THAT HELPED", "ONE THING WORTH NOTICING"];
