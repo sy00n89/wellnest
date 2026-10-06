@@ -1,7 +1,7 @@
 ---
 sut_path: /home/exedev/wellnest
-commit: 9e9e52f1a8f7948ebfc911fe95571579a1ff37c5
-updated: 2026-10-05
+commit: 7b07b302e7a2eb842c088fea21ba38018bafc43d
+updated: 2026-10-06
 external_references:
   - path: https://github.com/sy00n89/wellnest
     why: Upstream repo named by the user as the outside source; checked for issues, PRs, and wiki (no issues, no wiki, one merged PR #1 "local dev").
@@ -18,7 +18,7 @@ guards and coverage guidance.
 
 | Slug | Type | Pri | Assertion |
 |---|---|---|---|
-| `acked-entry-is-listed` | Safety | P0 | Always |
+| `acked-entry-is-listed` | Safety | P0 | Always — **implemented** |
 | `concurrent-creates-all-retained` | Safety | P0 | Always |
 | `deleted-entry-stays-gone` | Safety | P1 | Always |
 | `entry-ids-unique-in-list` | Safety | P2 | Always |
@@ -72,6 +72,7 @@ What you saved is there, exactly once, until you delete it. The entry key
 | **Invariant** | Workload `Always(acked_live_ids ⊆ listed_ids, "acknowledged entry is listed")` on every list read, where the acked/deleted model is shared by every thread that writes or deletes for that user. Details carry the missing ids, any listed item at the same `timestamp`, and field mismatches (mood, stress as a number, triggers, notes, date, time) to attribute cause. `Always` because losing an acknowledged write is never acceptable. Absorbs the former `entry-fields-round-trip` and `delete-removes-only-target`. |
 | **Antithesis Angle** | Two creates in one millisecond (parallel workers, or a backward clock step) overwrite each other. Network faults between api and dynamodb produce unknown outcomes that the bounds tolerate. |
 | **Why It Matters** | Silent loss of a saved check-in. Reproduced: 50 acked creates → 48–49 listed with `--workers 4`, 45–46 with thread-pool dispatch. |
+| **Implementation** | `antithesis/test/v1/wellnest/parallel_driver_check_ins.py` (2026-10-06): fresh private user per invocation, burst of 1–16 creates on 1–8 threads (SDK random), then list and `Always("acknowledged check-in is listed with the values sent")`. Reach claims: `Sometimes("check-in burst with 2+ acknowledged concurrent creates was verified")`, `Sometimes("two listed check-ins for one user were stored within 1 ms")`. Local run: 7 of 40 invocations lost acknowledged entries (e.g. 4 acked, 2 listed). Deletes are not yet exercised (no other writer touches these users). |
 
 **Open Questions:**
 

@@ -14,6 +14,6 @@ COPY antithesis/test/ /opt/antithesis/test/
 COPY antithesis/workload_entrypoint.py /opt/antithesis/workload_entrypoint.py
 
 # Catalog the assertions in the test commands (one symlink hop, as Antithesis requires).
-RUN mkdir -p /opt/antithesis/catalog && ln -s /opt/antithesis/test /opt/antithesis/catalog/test
+RUN ln -s /opt/antithesis/test /opt/antithesis/catalog
 
 CMD ["python", "/opt/antithesis/workload_entrypoint.py"]
