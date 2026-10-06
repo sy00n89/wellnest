@@ -128,3 +128,21 @@ on dynamodb.
 - Confirm running the api with `--workers 4` in the Antithesis compose. Recommended and verified. `(needs human input)`
 - In-memory vs. persistent dynamodb, which depends on node-termination availability. `(needs human input)`
 - Lower botocore retries/timeouts (`AWS_MAX_ATTEMPTS`, connect/read timeouts) in the api env so dynamodb faults surface within fault windows? `(needs human input)`
+
+## Setup status (2026-10-06)
+
+Implemented in `antithesis/config/docker-compose.yaml` (project `wellnest-antithesis`),
+`antithesis/Dockerfile` (stage `workload`), and `backend/Dockerfile`. `snouty validate`
+passes: setup-complete detected, 0 test commands (workload step pending).
+
+Instrumentation inventory:
+
+| Service | Language | Decision | Catalog path | Bootstrap property |
+|---|---|---|---|---|
+| api | Python 3.12 | Cataloged (Python has no coverage instrumentation) | `/opt/antithesis/catalog -> /app` | `reachable("api dispatched a request to a handler")` in `server.py` `dispatch` |
+| workload | Python 3.12 | Cataloged | `/opt/antithesis/catalog/test -> /opt/antithesis/test` | none yet; emits `setup_complete` via the SDK after `GET /plant` succeeds |
+| anthropic-mock | Python 3.12 | Uninstrumented: a test double, not the SUT | — | — |
+| dynamodb | Java (Amazon image) | Uninstrumented: third-party dependency | — | — |
+
+Decisions taken: api runs `--workers 4`; dynamodb in memory (`amazon/dynamodb-local:3.3.1`);
+default botocore retries; mock misbehavior changes deferred to the workload step.
