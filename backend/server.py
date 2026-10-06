@@ -10,6 +10,7 @@ Run with:  uvicorn server:app --host 0.0.0.0 --port 8080
 import os
 import sys
 
+from antithesis.assertions import reachable
 from fastapi import FastAPI, Request, Response
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'handlers'))
@@ -54,6 +55,9 @@ async def dispatch(request: Request):
     handler = ROUTES.get(resource)
     if handler is None:
         return Response(status_code=404, content='{"error": "Not found"}', media_type='application/json')
+
+    # Bootstrap property: proves the Antithesis SDK and assertion cataloging work.
+    reachable("api dispatched a request to a handler", {"resource": resource})
 
     result = handler.lambda_handler(await to_event(request), None)
 
