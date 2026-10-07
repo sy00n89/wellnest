@@ -65,3 +65,15 @@ def test_delete_lowers_trigger_counts():
     _, counts = call(patterns, 'GET')
     frequency = {p['trigger']: p['frequency'] for p in counts}
     assert frequency == {'work': 1}  # 'sleep' reached zero and was removed
+
+
+def test_same_millisecond_check_ins_are_both_kept(monkeypatch):
+    # Two check-ins in the same millisecond used to share a database key,
+    # so the second silently overwrote the first (found by Antithesis).
+    monkeypatch.setattr(entries.time, 'time', lambda: 1_790_000_000.123)
+
+    _, first = call(entries, 'POST', {'mood': 'good'})
+    _, second = call(entries, 'POST', {'mood': 'low'})
+
+    _, listed = call(entries, 'GET')
+    assert {e['id'] for e in listed} == {first['id'], second['id']}

@@ -72,7 +72,7 @@ def create_entry(event):
 
     item = {
         'user_id': user_id,
-        'timestamp': Decimal(str(int(now * 1000))),
+        'timestamp': Decimal(str(int(now * 1000))),  # may move forward, see put_new_entry
         'id': entry_id,
         'date': date,
         'time': entry_time,
@@ -87,7 +87,7 @@ def create_entry(event):
         'vulnerability_factors': body.get('vulnerability_factors', {}),
     }
 
-    table.put_item(Item=item)
+    put_new_entry(item)
 
     # Update plant after entry
     update_plant(user_id)
@@ -97,6 +97,32 @@ def create_entry(event):
         'headers': cors_headers(),
         'body': json.dumps({'message': 'Entry created', 'id': entry_id})
     }
+
+def put_new_entry(item, max_attempts=100):
+    """Save a new entry without overwriting another one.
+
+    The key is (user_id, timestamp in ms), so two check-ins in the same
+    millisecond would collide. Only write if the key is free; if it is taken,
+    move forward one millisecond and try again.
+    """
+    for _ in range(max_attempts):
+        try:
+            table.put_item(
+                Item=item,
+                ConditionExpression='attribute_not_exists(#ts)',
+                ExpressionAttributeNames={'#ts': 'timestamp'},
+            )
+            return
+        except table.meta.client.exceptions.ConditionalCheckFailedException:
+            # boto3 retries a put whose reply was lost; if the slot already
+            # holds this very entry, that earlier attempt succeeded.
+            existing = table.get_item(
+                Key={'user_id': item['user_id'], 'timestamp': item['timestamp']}
+            ).get('Item')
+            if existing and existing.get('id') == item['id']:
+                return
+            item['timestamp'] += 1
+    raise RuntimeError('could not find a free timestamp for the new entry')
 
 def delete_entry(event):
     params = event.get('queryStringParameters') or {}
