@@ -1,9 +1,9 @@
 import json
 import os
-import urllib.error
 import urllib.request
 
 import boto3
+from antithesis.assertions import reachable
 from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
@@ -14,6 +14,9 @@ ANTHROPIC_BASE_URL = os.environ.get('ANTHROPIC_BASE_URL', 'https://api.anthropic
 ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-5')
 
 FALLBACK_TEXT = 'Unable to generate insight right now. Please try again.'
+
+# API Gateway ends requests at 29 s, so the Anthropic call must give up well before that.
+ANTHROPIC_TIMEOUT_SECONDS = 20
 
 def cors_headers():
     return {
@@ -68,14 +71,21 @@ def call_anthropic(prompt):
         method='POST',
     )
     try:
-        with urllib.request.urlopen(request, timeout=60) as reply:
+        with urllib.request.urlopen(request, timeout=ANTHROPIC_TIMEOUT_SECONDS) as reply:
             data = json.loads(reply.read())
-    except (urllib.error.URLError, json.JSONDecodeError) as e:
-        print(f'Anthropic call failed: {e}')
+        content = data.get('content') or [{}]
+        text = content[0].get('text')
+    except Exception as e:
+        # Any failure (HTTP error, timeout, dropped connection, bad JSON or an
+        # unexpected reply shape) shows the fallback rather than an error.
+        print(f'Anthropic call failed: {type(e).__name__}: {e}')
+        reachable("insights fallback: anthropic call failed", {'error': type(e).__name__})
         return FALLBACK_TEXT
 
-    content = data.get('content') or [{}]
-    return content[0].get('text') or FALLBACK_TEXT
+    if not text:
+        reachable("insights fallback: empty text", {})
+        return FALLBACK_TEXT
+    return text
 
 def join_or_none(values):
     return ', '.join(values or []) or 'none'

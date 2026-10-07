@@ -1,11 +1,15 @@
 """A stand-in for the Anthropic Messages API, for running without internet.
 
-It returns a canned five-section insight. One reply in five is deliberately
-malformed, so the app's handling of a bad reply gets exercised too.
+Most replies are a canned five-section insight. Some are deliberately bad, the
+way a real dependency can be: empty or label-less text, HTTP 429 or 500,
+invalid JSON, or a stall (longer than the 29 s gateway limit, or longer than
+the app's own 60 s timeout). Choices come from the Antithesis SDK's random
+source, so a run that finds a bug can be replayed exactly.
 """
-import random
+import time
 
-from fastapi import FastAPI
+from antithesis.random import random_choice
+from fastapi import FastAPI, Response
 
 app = FastAPI()
 
@@ -24,15 +28,14 @@ Your calmer entries often follow time outside or with friends. Those moments see
 ONE THING WORTH NOTICING
 Your stress tends to ease the day after you rest well."""
 
-BAD_REPLIES = [
-    "",                                     # empty text
-    "Sorry, something went wrong on my end.",  # no section labels at all
+# Weighted by repetition: mostly good replies.
+BEHAVIORS = ['good'] * 12 + [
+    'empty_text', 'no_labels', 'http_429', 'http_500', 'invalid_json',
+    'stall_35s', 'stall_65s',
 ]
 
 
-@app.post('/v1/messages')
-def messages():
-    text = random.choice(BAD_REPLIES) if random.random() < 0.2 else GOOD_REPLY
+def message(text):
     return {
         'id': 'msg_mock',
         'type': 'message',
@@ -41,3 +44,22 @@ def messages():
         'content': [{'type': 'text', 'text': text}],
         'stop_reason': 'end_turn',
     }
+
+
+@app.post('/v1/messages')
+def messages():
+    behavior = random_choice(BEHAVIORS)
+    print(f'mock anthropic behavior: {behavior}')
+    if behavior == 'empty_text':
+        return message('')
+    if behavior == 'no_labels':
+        return message('Sorry, something went wrong on my end.')
+    if behavior == 'http_429':
+        return Response(status_code=429, content='{"error": "rate_limited"}', media_type='application/json')
+    if behavior == 'http_500':
+        return Response(status_code=500, content='{"error": "overloaded"}', media_type='application/json')
+    if behavior == 'invalid_json':
+        return Response(status_code=200, content='{"content": [', media_type='application/json')
+    if behavior.startswith('stall_'):
+        time.sleep(int(behavior[len('stall_'):-1]))
+    return message(GOOD_REPLY)
