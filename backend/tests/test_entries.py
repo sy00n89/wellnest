@@ -92,3 +92,16 @@ def test_same_millisecond_check_ins_are_both_kept(monkeypatch):
 
     _, listed = call(entries, 'GET')
     assert {e['id'] for e in listed} == {first['id'], second['id']}
+
+
+def test_plant_count_balances_in_any_order():
+    # Concurrent deletes each recounted entries and the last, stale recount
+    # won (found by Antithesis: 9 entries, plant said 10). The count now only
+    # moves by +1/-1, so the order of updates must not matter.
+    entries.update_plant('default', -1)
+    entries.update_plant('default', +1)
+    entries.update_plant('default', +1)
+
+    _, p = call(plant, 'GET')
+    assert p['check_ins'] == 1
+    assert p['stage'] == 'sprout'

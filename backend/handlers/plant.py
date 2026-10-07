@@ -2,6 +2,8 @@ import json
 import os
 from decimal import Decimal
 import boto3
+
+from plant_stages import plant_stage
 from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
@@ -44,13 +46,9 @@ def get_plant(event):
     item = response.get('Item')
 
     if not item:
-        # Return default plant
-        item = {
-            'user_id': user_id,
-            'stage': 'sprout',
-            'check_ins': 0,
-            'days_active': 0,
-        }
+        item = {'user_id': user_id, 'check_ins': 0, 'days_active': 0}
+    # The stage always follows the current count (see plant_stages.py).
+    item['stage'] = plant_stage(int(item.get('check_ins', 0)))
 
     return {
         'statusCode': 200,

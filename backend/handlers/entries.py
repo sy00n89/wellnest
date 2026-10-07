@@ -9,6 +9,7 @@ from antithesis.assertions import unreachable
 from boto3.dynamodb.conditions import Key
 
 import pattern_counts
+from plant_stages import plant_stage  # noqa: F401  (used by tests)
 
 dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
@@ -93,7 +94,7 @@ def create_entry(event):
     put_new_entry(item)
 
     # Update plant and trigger counts after entry
-    update_plant(user_id)
+    update_plant(user_id, +1)
     update_trigger_counts(user_id, item, +1)
 
     return {
@@ -152,7 +153,7 @@ def delete_entry(event):
     )
 
     # Update plant and trigger counts after delete
-    update_plant(user_id)
+    update_plant(user_id, -1)
     update_trigger_counts(user_id, entry, -1)
 
     return {
@@ -170,38 +171,20 @@ def update_trigger_counts(user_id, entry, direction):
         print(f"Trigger count update error: {e}")
         unreachable("trigger counts failed to update after an entry change", {'error': type(e).__name__})
 
-# Every 20 check-ins grows the plant one stage. Keep in sync with
-# STAGE_THRESHOLDS in src/App.jsx.
-PLANT_STAGE_THRESHOLDS = [
-    (80, 'mature_tree'),
-    (60, 'young_tree'),
-    (40, 'plant'),
-    (20, 'seedling'),
-]
+def update_plant(user_id, direction):
+    """Count (+1) or uncount (-1) one check-in on the user's plant.
 
-def plant_stage(total):
-    """Return the plant stage for a number of check-ins."""
-    for threshold, stage in PLANT_STAGE_THRESHOLDS:
-        if total >= threshold:
-            return stage
-    return 'sprout'
-
-def update_plant(user_id):
-    """Update plant stage based on total entries"""
+    An atomic ADD rather than a recount: concurrent recounts could finish out
+    of order and leave a stale count. The stage is derived from the count
+    when the plant is read.
+    """
     try:
         plant_table = dynamodb.Table(os.environ['PLANT_TABLE'])
-
-        # Count total entries
-        response = table.query(
-            KeyConditionExpression=Key('user_id').eq(user_id)
+        plant_table.update_item(
+            Key={'user_id': user_id},
+            UpdateExpression='ADD check_ins :d',
+            ExpressionAttributeValues={':d': Decimal(direction)},
         )
-        total = len(response.get('Items', []))
-
-        plant_table.put_item(Item={
-            'user_id': user_id,
-            'stage': plant_stage(total),
-            'check_ins': Decimal(str(total)),
-        })
     except Exception as e:
         print(f"Plant update error: {e}")
         unreachable("plant failed to update after an entry change", {'error': type(e).__name__})
