@@ -1,4 +1,5 @@
 import entries
+import pattern_counts
 import patterns
 import plant
 from conftest import call
@@ -48,23 +49,37 @@ def test_delete_updates_plant():
     pass
 
 
+def test_check_in_updates_trigger_counts_on_server():
+    # The server counts triggers itself; the browser no longer posts /patterns.
+    call(entries, 'POST', {'mood': 'okay', 'stress_level': 2, 'triggers': ['work', 'sleep']})
+    call(entries, 'POST', {'mood': 'low', 'stress_level': 8, 'triggers': ['work']})
+
+    _, counts = call(patterns, 'GET')
+    by_trigger = {p['trigger']: p for p in counts}
+    assert {t: p['frequency'] for t, p in by_trigger.items()} == {'work': 2, 'sleep': 1}
+    assert by_trigger['work']['severity'] == 5.0  # average of 2 and 8
+
+
 def test_delete_lowers_trigger_counts():
-    # Like the browser: create the entry, then post each trigger to /patterns.
-    def check_in(triggers):
-        _, created = call(entries, 'POST', {'mood': 'okay', 'triggers': triggers})
-        for trigger in triggers:
-            call(patterns, 'POST', {'trigger': trigger, 'stress_level': 5})
-        return created['id']
+    call(entries, 'POST', {'mood': 'okay', 'triggers': ['work']})
+    _, created = call(entries, 'POST', {'mood': 'okay', 'triggers': ['work', 'sleep']})
 
-    check_in(['work'])
-    entry_id = check_in(['work', 'sleep'])
-
-    status, _ = call(entries, 'DELETE', path_id=entry_id)
+    status, _ = call(entries, 'DELETE', path_id=created['id'])
     assert status == 200
 
     _, counts = call(patterns, 'GET')
     frequency = {p['trigger']: p['frequency'] for p in counts}
-    assert frequency == {'work': 1}  # 'sleep' reached zero and was removed
+    assert frequency == {'work': 1}  # 'sleep' reached zero and is not shown
+
+
+def test_trigger_counts_balance_in_any_order():
+    # A delete's -1 can arrive before its check-in's +1 (found by Antithesis).
+    # Counts are add-only, so the order must not matter.
+    pattern_counts.adjust('default', ['work'], 5, -1)
+    pattern_counts.adjust('default', ['work'], 5, +1)
+
+    _, counts = call(patterns, 'GET')
+    assert counts == []
 
 
 def test_same_millisecond_check_ins_are_both_kept(monkeypatch):

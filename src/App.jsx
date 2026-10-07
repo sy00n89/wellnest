@@ -1600,14 +1600,7 @@ export default function App() {
         body: JSON.stringify({ ...entry, user_id: USER_ID }),
       });
 
-      // Save triggers as patterns
-      for (const trigger of (entry.triggers || [])) {
-        await fetch(`${API_BASE}/patterns`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: USER_ID, trigger, stress_level: entry.stress_level }),
-        });
-      }
+      // The server updates trigger counts as part of saving the entry.
 
       await loadData();
     } catch (err) {

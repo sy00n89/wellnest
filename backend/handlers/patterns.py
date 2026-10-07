@@ -2,6 +2,8 @@ import json
 import os
 from decimal import Decimal
 import boto3
+
+import pattern_counts
 from boto3.dynamodb.conditions import Key
 
 dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
@@ -44,8 +46,9 @@ def get_patterns(event):
         KeyConditionExpression=Key('user_id').eq(user_id)
     )
 
-    patterns = response.get('Items', [])
-    patterns.sort(key=lambda x: x.get('frequency', 0), reverse=True)
+    patterns = [pattern_counts.to_response(p) for p in response.get('Items', [])
+                if p.get('frequency', 0) > 0]
+    patterns.sort(key=lambda x: x['frequency'], reverse=True)
 
     return {
         'statusCode': 200,
@@ -62,26 +65,10 @@ def upsert_pattern(event):
     if not trigger:
         return {'statusCode': 400, 'headers': cors_headers(), 'body': json.dumps({'error': 'Missing trigger'})}
 
-    # Check if pattern exists and increment frequency
-    response = table.get_item(Key={'user_id': user_id, 'trigger': trigger})
-    existing = response.get('Item')
-
-    if existing:
-        new_frequency = int(existing.get('frequency', 0)) + 1
-        avg_severity = (float(existing.get('severity', stress_level)) + stress_level) / 2
-    else:
-        new_frequency = 1
-        avg_severity = stress_level
-
-    table.put_item(Item={
-        'user_id': user_id,
-        'trigger': trigger,
-        'frequency': Decimal(str(new_frequency)),
-        'severity': Decimal(str(round(avg_severity, 1))),
-    })
+    pattern_counts.adjust(user_id, [trigger], stress_level, +1)
 
     return {
         'statusCode': 201,
         'headers': cors_headers(),
-        'body': json.dumps({'message': 'Pattern updated', 'frequency': new_frequency})
+        'body': json.dumps({'message': 'Pattern updated'})
     }

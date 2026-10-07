@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 import boto3
 from boto3.dynamodb.conditions import Key
 
+import pattern_counts
+
 dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
 
@@ -89,8 +91,9 @@ def create_entry(event):
 
     put_new_entry(item)
 
-    # Update plant after entry
+    # Update plant and trigger counts after entry
     update_plant(user_id)
+    update_trigger_counts(user_id, item, +1)
 
     return {
         'statusCode': 201,
@@ -149,7 +152,7 @@ def delete_entry(event):
 
     # Update plant and trigger counts after delete
     update_plant(user_id)
-    decrement_patterns(user_id, entry.get('triggers', []))
+    update_trigger_counts(user_id, entry, -1)
 
     return {
         'statusCode': 200,
@@ -157,30 +160,13 @@ def delete_entry(event):
         'body': json.dumps({'message': 'Entry deleted'})
     }
 
-def decrement_patterns(user_id, triggers):
-    """Lower each trigger's frequency by one; remove the row when it reaches zero."""
+def update_trigger_counts(user_id, entry, direction):
+    """Count (+1) or uncount (-1) an entry's triggers in the patterns table."""
     try:
-        patterns_table = dynamodb.Table(os.environ['PATTERNS_TABLE'])
-        for trigger in triggers:
-            key = {'user_id': user_id, 'trigger': trigger}
-            try:
-                result = patterns_table.update_item(
-                    Key=key,
-                    UpdateExpression='ADD frequency :minus_one',
-                    ConditionExpression='attribute_exists(frequency)',
-                    ExpressionAttributeValues={':minus_one': Decimal(-1)},
-                    ReturnValues='UPDATED_NEW',
-                )
-            except patterns_table.meta.client.exceptions.ConditionalCheckFailedException:
-                continue  # no pattern row for this trigger
-            if result['Attributes']['frequency'] <= 0:
-                patterns_table.delete_item(
-                    Key=key,
-                    ConditionExpression='frequency <= :zero',
-                    ExpressionAttributeValues={':zero': Decimal(0)},
-                )
+        pattern_counts.adjust(user_id, entry.get('triggers', []),
+                              entry.get('stress_level', 5), direction)
     except Exception as e:
-        print(f"Pattern decrement error: {e}")
+        print(f"Trigger count update error: {e}")
 
 # Every 20 check-ins grows the plant one stage. Keep in sync with
 # STAGE_THRESHOLDS in src/App.jsx.
