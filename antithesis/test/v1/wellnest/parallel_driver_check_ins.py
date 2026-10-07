@@ -94,6 +94,7 @@ def main():
         print(f'{user_id}: could not read the journal back; nothing to check this time')
         return
 
+    api.record_expectations(user_id, acked, [])
     by_id = {e.get('id'): e for e in listed}
     missing = [i for i in acked if i not in by_id]
     changed = [i for i in acked if i in by_id and not fields_match(acked[i], by_id[i])]

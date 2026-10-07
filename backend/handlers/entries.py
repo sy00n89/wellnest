@@ -5,6 +5,7 @@ import time
 from decimal import Decimal
 from datetime import datetime, timezone
 import boto3
+from antithesis.assertions import unreachable
 from boto3.dynamodb.conditions import Key
 
 import pattern_counts
@@ -167,6 +168,7 @@ def update_trigger_counts(user_id, entry, direction):
                               entry.get('stress_level', 5), direction)
     except Exception as e:
         print(f"Trigger count update error: {e}")
+        unreachable("trigger counts failed to update after an entry change", {'error': type(e).__name__})
 
 # Every 20 check-ins grows the plant one stage. Keep in sync with
 # STAGE_THRESHOLDS in src/App.jsx.
@@ -202,3 +204,4 @@ def update_plant(user_id):
         })
     except Exception as e:
         print(f"Plant update error: {e}")
+        unreachable("plant failed to update after an entry change", {'error': type(e).__name__})

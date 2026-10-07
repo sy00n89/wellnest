@@ -120,6 +120,7 @@ def main():
         print(f'{user_id}: could not read the journal back; nothing to check this time')
         return
     listed_ids = {e['id'] for e in listed}
+    api.record_expectations(user_id, live, deleted_acked)
 
     missing = sorted(live - listed_ids)
     always(not missing, "acknowledged check-in is listed after concurrent check-ins and deletes",

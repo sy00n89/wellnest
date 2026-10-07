@@ -33,8 +33,29 @@ def expected_stage(check_ins):
     return 'sprout'
 
 
-def request(method, path, body=None):
-    """Send one request. Returns (outcome, status, decoded_body_or_None)."""
+def request(method, path, body=None, judge=True):
+    """Send one request. Returns (outcome, status, decoded_body_or_None).
+
+    With judge=True (the default) every response is also checked against the
+    production limits: an answer within API Gateway's 29 s, and no 5xx.
+    """
+    started = time.monotonic()
+    result = _send(method, path, body)
+    if judge:
+        outcome, status, _ = result
+        elapsed = round(time.monotonic() - started, 2)
+        details = {'method': method, 'path': path.split('?')[0], 'status': status, 'seconds': elapsed}
+        always(elapsed < TIMEOUT_SECONDS, "API request finishes within the 29 s gateway limit", details)
+        always(status is None or status < 500, "API never answers a valid request with a server error",
+               details)
+        if method == 'GET' and path.startswith('/entries'):
+            # The app shows an empty history when this read fails.
+            always(status is None or status < 500, "reading a journal never fails with a server error",
+                   details)
+    return result
+
+
+def _send(method, path, body):
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(f'{API_URL}{path}', data=data, method=method,
                                  headers={'Content-Type': 'application/json'})
@@ -108,3 +129,27 @@ def get_pattern_frequencies(user_id, attempts=20):
     if rows is None:
         return None
     return {r['trigger']: int(float(r.get('frequency', 0))) for r in rows}
+
+
+# ── Ledger: what each test command expects, for the end-of-run checks ─────────
+# All test commands run in the workload container, so a local directory is
+# shared between them. One small JSON file per user.
+LEDGER_DIR = '/tmp/wellnest-ledger'
+
+
+def record_expectations(user_id, present_ids, absent_ids):
+    """Remember ids that must still be listed, and ids that must never be listed."""
+    os.makedirs(LEDGER_DIR, exist_ok=True)
+    with open(os.path.join(LEDGER_DIR, f'{user_id}.json'), 'w') as f:
+        json.dump({'user_id': user_id, 'present': sorted(present_ids),
+                   'absent': sorted(absent_ids)}, f)
+
+
+def read_expectations():
+    if not os.path.isdir(LEDGER_DIR):
+        return []
+    records = []
+    for name in sorted(os.listdir(LEDGER_DIR)):
+        with open(os.path.join(LEDGER_DIR, name)) as f:
+            records.append(json.load(f))
+    return records
