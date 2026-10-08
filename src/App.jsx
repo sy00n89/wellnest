@@ -532,25 +532,25 @@ const CheckInScreen = ({ onSubmit, entries = [] }) => {
       setPendingEntry(entry);
       setShowAppraisal(true);
     } else {
-      onSubmit(entry);
+      if (!(await onSubmit(entry))) return;
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     }
   };
 
-  const handleAppraisalComplete = (appraisalData) => {
+  const handleAppraisalComplete = async (appraisalData) => {
     setShowAppraisal(false);
-    onSubmit({ ...pendingEntry, ...appraisalData });
+    if (!(await onSubmit({ ...pendingEntry, ...appraisalData }))) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     setPendingEntry(null);
   };
 
-  const handleAppraisalSkip = () => {
+  const handleAppraisalSkip = async () => {
     setShowAppraisal(false);
-    onSubmit(pendingEntry);
+    if (!(await onSubmit(pendingEntry))) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
@@ -925,37 +925,16 @@ const InsightsScreen = ({ entries }) => {
     setInsight("");
 
     try {
-      // Build a structured summary of the user's recent entries
-      const recentEntries = entries.slice(0, 14);
-
-      const entrySummary = recentEntries.map(e => {
-        const base = `Date: ${e.date}, Mood: ${e.mood}, Stress: ${e.stress_level}/10, Triggers: ${(e.triggers||[]).join(", ")||"none"}, Physical signs: ${(e.physical_signs||[]).join(", ")||"none"}, Notes: ${e.notes||"none"}`;
-        const appraisal = e.appraisal_type ? `, Appraisal: viewed as a ${e.appraisal_type}, Resources felt: ${(e.perceived_resources||[]).join(", ")||"none"}${e.appraisal_reflection ? `, Reflection: "${e.appraisal_reflection}"` : ""}` : "";
-        const vuln = e.vulnerability_factors && Object.keys(e.vulnerability_factors).length > 0
-          ? `, Background factors: ${Object.entries(e.vulnerability_factors).map(([k,v]) => `${k}: ${v}`).join(", ")}`
-          : "";
-        return base + appraisal + vuln;
-      }).join("\n");
-
-      const prompt = `You are a warm, thoughtful wellness companion grounded in stress science. A user has been tracking their stress and wellbeing. Here are their recent check-in entries:\n\n${entrySummary}\n\nBased on these entries, write a structured insight report with exactly 5 sections. Each section must start with its label on its own line, followed by 2-3 sentences of content. Use this exact format:\n\nWHAT YOUR BODY IS SAYING\n[2-3 sentences about physical signs and what they signal. Grounded in Allostatic Load — the body accumulates stress before the mind recognizes it.]\n\nWHAT'S DRIVING IT\n[2-3 sentences identifying the key triggers and patterns. Grounded in Perceived Stress Theory — stress is shaped by what we perceive as threatening or uncontrollable.]\n\nHOW YOU'RE INTERPRETING IT\n[2-3 sentences on whether the user seems to be appraising situations as threats or challenges. Grounded in Cognitive Appraisal Theory by Lazarus and Folkman.]\n\nA MOMENT THAT HELPED\n[2-3 sentences identifying any lighter or calmer moments and what seemed to make them possible. Grounded in Behavioral Activation — certain behaviors buffer stress.]\n\nONE THING WORTH NOTICING\n[1-2 sentences. A single gentle observation the user can carry with them. Not advice — just awareness.]\n\nRules: Do not use markdown headers, bullet points, or asterisks. Do not give medical advice or diagnoses. Do not use the word streak. Write in plain warm sentences. Keep each section short and easy to read.`;
-
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
+      // The backend reads the entries, builds the prompt, and calls Anthropic,
+      // so the API key never reaches the browser.
+      const response = await fetch(`${API_BASE}/insights`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-sonnet-4-20250514",
-          max_tokens: 1000,
-          messages: [{ role: "user", content: prompt }],
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ user_id: USER_ID }),
       });
 
       const data = await response.json();
-      const text = data.content?.[0]?.text || "Unable to generate insight right now. Please try again.";
+      const text = data.text || "Unable to generate insight right now. Please try again.";
 
       // Parse into sections
       const sectionLabels = ["WHAT YOUR BODY IS SAYING", "WHAT'S DRIVING IT", "HOW YOU'RE INTERPRETING IT", "A MOMENT THAT HELPED", "ONE THING WORTH NOTICING"];
@@ -1393,10 +1372,12 @@ const STAGE_DESC = {
 };
 
 // Stage thresholds based on engagement depth (not consecutive days)
-const STAGE_THRESHOLDS = [0, 5, 12, 22, 35];
-const STAGE_NEXT = [5, 12, 22, 35, 35];
+// Check-ins needed to reach each stage. Keep in sync with
+// PLANT_STAGE_THRESHOLDS in backend/handlers/entries.py.
+const STAGE_THRESHOLDS = [0, 20, 40, 60, 80];
+const STAGE_NEXT = [20, 40, 60, 80, 80];
 
-const PlantScreen = ({ entries }) => {
+const PlantScreen = ({ plantData, entries }) => {
   // ── Behavioral Reinforcement Metrics ──────────────────────────────────────
   const totalCheckIns = entries.length;
 
@@ -1419,18 +1400,15 @@ const PlantScreen = ({ entries }) => {
   });
   const gentleDays = Object.values(dayStress).filter(stresses => Math.max(...stresses) <= 4).length;
 
-  // Engagement depth score drives plant growth
-  const engagementScore = totalCheckIns + (hardDayFollowUps * 2) + gentleDays;
-  const stage = engagementScore >= 35 ? "mature_tree"
-    : engagementScore >= 22 ? "young_tree"
-    : engagementScore >= 12 ? "plant"
-    : engagementScore >= 5 ? "seedling"
-    : "sprout";
+  // Plant growth comes from the server, which recounts check-ins on every
+  // create and delete.
+  const plantCheckIns = Number(plantData?.check_ins ?? 0);
+  const stage = PLANT_STAGES.includes(plantData?.stage) ? plantData.stage : "sprout";
   const stageIdx = PLANT_STAGES.indexOf(stage);
   const currentThreshold = STAGE_THRESHOLDS[stageIdx];
   const nextThreshold = STAGE_NEXT[stageIdx];
   const progressPct = stageIdx === 4 ? 100
-    : Math.round(((engagementScore - currentThreshold) / (nextThreshold - currentThreshold)) * 100);
+    : Math.min(100, Math.max(0, Math.round(((plantCheckIns - currentThreshold) / (nextThreshold - currentThreshold)) * 100)));
 
   return (
     <div className="wn-page">
@@ -1567,7 +1545,22 @@ const BottomNav = ({ current, onChange }) => (
 
 // ── API ───────────────────────────────────────────────────────────────────────
 const API_BASE = import.meta.env.VITE_API_BASE ?? "https://ww116obsv3.execute-api.us-east-1.amazonaws.com/Prod";
-const USER_ID = "default";
+// Each browser gets its own journal: a random id kept in localStorage. If
+// storage is unavailable, the id lasts only for this page load.
+const getUserId = () => {
+  const newId = () => (crypto.randomUUID?.() ?? `user-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+  try {
+    let id = localStorage.getItem("wellnest-user-id");
+    if (!id) {
+      id = newId();
+      localStorage.setItem("wellnest-user-id", id);
+    }
+    return id;
+  } catch {
+    return newId();
+  }
+};
+const USER_ID = getUserId();
 
 // ── Main App ──────────────────────────────────────────────────────────────────
 export default function App() {
@@ -1575,6 +1568,7 @@ export default function App() {
   const [entries, setEntries] = useState([]);
   const [plantData, setPlantData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const loadData = async () => {
     setLoading(true);
@@ -1583,12 +1577,14 @@ export default function App() {
         fetch(`${API_BASE}/entries?user_id=${USER_ID}`),
         fetch(`${API_BASE}/plant?user_id=${USER_ID}`),
       ]);
-      const entriesData = await entriesRes.json();
-      const plantDataJson = await plantRes.json();
-      setEntries(Array.isArray(entriesData) ? entriesData : []);
-      setPlantData(plantDataJson);
+      // On a failed load, keep showing what we had rather than an empty journal.
+      if (!entriesRes.ok || !plantRes.ok) throw new Error(`load failed: ${entriesRes.status}/${plantRes.status}`);
+      setEntries(await entriesRes.json());
+      setPlantData(await plantRes.json());
+      setError("");
     } catch (err) {
       console.error("Error loading data:", err);
+      setError("Couldn't reach Wellnest to load your journal. Please try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -1599,35 +1595,33 @@ export default function App() {
     setScreen("checkin");
   };
 
+  // Returns true when the check-in was saved, so the form knows whether to clear.
   const handleSubmitEntry = async (entry) => {
     try {
-      await fetch(`${API_BASE}/entries`, {
+      const res = await fetch(`${API_BASE}/entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...entry, user_id: USER_ID }),
       });
-
-      // Save triggers as patterns
-      for (const trigger of (entry.triggers || [])) {
-        await fetch(`${API_BASE}/patterns`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ user_id: USER_ID, trigger, stress_level: entry.stress_level }),
-        });
-      }
-
+      if (!res.ok) throw new Error(`save failed: ${res.status}`);
+      setError("");
       await loadData();
+      return true;
     } catch (err) {
       console.error("Error saving entry:", err);
+      setError("Couldn't save your check-in. Please try again in a moment.");
+      return false;
     }
   };
 
   const handleDelete = async (id) => {
     try {
-      await fetch(`${API_BASE}/entries/${id}?user_id=${USER_ID}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/entries/${id}?user_id=${USER_ID}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`delete failed: ${res.status}`);
       await loadData();
     } catch (err) {
       console.error("Error deleting entry:", err);
+      setError("Couldn't delete that entry. Please try again in a moment.");
     }
   };
 
@@ -1655,6 +1649,15 @@ export default function App() {
       <div className="wn-app wn-center" style={{ paddingBottom: 0 }}>
         {loading && (
           <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, background: T.sage, zIndex: 999, opacity: 0.8 }} />
+        )}
+        {error && (
+          <div role="alert" onClick={() => setError("")} style={{
+            position: "fixed", top: 12, left: 16, right: 16, zIndex: 1000, cursor: "pointer",
+            background: T.surface, border: `1px solid ${T.clay}`, borderRadius: 12,
+            padding: "12px 16px", fontSize: 14, color: T.textPrimary, boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+          }}>
+            {error} <span style={{ color: T.textMuted }}>(tap to dismiss)</span>
+          </div>
         )}
         {screen === "checkin" && <CheckInScreen onSubmit={handleSubmitEntry} entries={entries} />}
         {screen === "insights" && <InsightsScreen entries={entries} />}

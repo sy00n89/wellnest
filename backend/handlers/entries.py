@@ -4,10 +4,11 @@ import uuid
 import time
 from decimal import Decimal
 from datetime import datetime, timezone
-import boto3
-from boto3.dynamodb.conditions import Key
 
-dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
+import entry_queries
+
+import aws
+from aws import dynamodb
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
 
 class DecimalEncoder(json.JSONEncoder):
@@ -40,17 +41,13 @@ def lambda_handler(event, context):
         else:
             return {'statusCode': 405, 'headers': cors_headers(), 'body': json.dumps({'error': 'Method not allowed'})}
     except Exception as e:
-        return {'statusCode': 500, 'headers': cors_headers(), 'body': json.dumps({'error': str(e)})}
+        return aws.error_response(e, cors_headers())
 
 def get_entries(event):
     params = event.get('queryStringParameters') or {}
     user_id = params.get('user_id', 'default')
 
-    response = table.query(
-        KeyConditionExpression=Key('user_id').eq(user_id)
-    )
-
-    entries = response.get('Items', [])
+    entries = entry_queries.all_entries(user_id)
     entries.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
 
     return {
@@ -72,7 +69,7 @@ def create_entry(event):
 
     item = {
         'user_id': user_id,
-        'timestamp': Decimal(str(int(now * 1000))),
+        'timestamp': Decimal(str(int(now * 1000))),  # may move forward, see put_new_entry
         'id': entry_id,
         'date': date,
         'time': entry_time,
@@ -87,16 +84,42 @@ def create_entry(event):
         'vulnerability_factors': body.get('vulnerability_factors', {}),
     }
 
-    table.put_item(Item=item)
-
-    # Update plant after entry
-    update_plant(user_id)
+    # The plant and trigger counts are computed from entries when read, so
+    # saving the entry is the only write.
+    put_new_entry(item)
 
     return {
         'statusCode': 201,
         'headers': cors_headers(),
         'body': json.dumps({'message': 'Entry created', 'id': entry_id})
     }
+
+def put_new_entry(item, max_attempts=100):
+    """Save a new entry without overwriting another one.
+
+    The key is (user_id, timestamp in ms), so two check-ins in the same
+    millisecond would collide. Only write if the key is free; if it is taken,
+    move forward one millisecond and try again.
+    """
+    for _ in range(max_attempts):
+        try:
+            table.put_item(
+                Item=item,
+                ConditionExpression='attribute_not_exists(#ts)',
+                ExpressionAttributeNames={'#ts': 'timestamp'},
+            )
+            return
+        except table.meta.client.exceptions.ConditionalCheckFailedException:
+            # boto3 retries a put whose reply was lost; if the slot already
+            # holds this very entry (even one since deleted), that earlier
+            # attempt succeeded and nothing more should be written.
+            existing = table.get_item(
+                Key={'user_id': item['user_id'], 'timestamp': item['timestamp']}
+            ).get('Item')
+            if existing and existing.get('id') == item['id']:
+                return
+            item['timestamp'] += 1
+    raise RuntimeError('could not find a free timestamp for the new entry')
 
 def delete_entry(event):
     params = event.get('queryStringParameters') or {}
@@ -108,55 +131,22 @@ def delete_entry(event):
         return {'statusCode': 400, 'headers': cors_headers(), 'body': json.dumps({'error': 'Missing entry id'})}
 
     # Find the entry by id to get its timestamp
-    response = table.query(
-        KeyConditionExpression=Key('user_id').eq(user_id)
-    )
-    entries = response.get('Items', [])
+    entries = entry_queries.all_entries(user_id)
     entry = next((e for e in entries if e.get('id') == entry_id), None)
 
     if not entry:
         return {'statusCode': 404, 'headers': cors_headers(), 'body': json.dumps({'error': 'Entry not found'})}
 
-    table.delete_item(
-        Key={'user_id': user_id, 'timestamp': entry['timestamp']}
+    # Mark rather than erase: a delayed duplicate of the original save could
+    # otherwise arrive later, find the slot free, and bring the entry back.
+    table.update_item(
+        Key={'user_id': user_id, 'timestamp': entry['timestamp']},
+        UpdateExpression='SET deleted = :true',
+        ExpressionAttributeValues={':true': True},
     )
-
-    # Update plant after delete
-    update_plant(user_id)
 
     return {
         'statusCode': 200,
         'headers': cors_headers(),
         'body': json.dumps({'message': 'Entry deleted'})
     }
-
-def update_plant(user_id):
-    """Update plant stage based on total entries"""
-    try:
-        plant_table = dynamodb.Table(os.environ['PLANT_TABLE'])
-
-        # Count total entries
-        response = table.query(
-            KeyConditionExpression=Key('user_id').eq(user_id)
-        )
-        total = len(response.get('Items', []))
-
-        # Determine stage
-        if total >= 20:
-            stage = 'mature_tree'
-        elif total >= 14:
-            stage = 'young_tree'
-        elif total >= 8:
-            stage = 'plant'
-        elif total >= 3:
-            stage = 'seedling'
-        else:
-            stage = 'sprout'
-
-        plant_table.put_item(Item={
-            'user_id': user_id,
-            'stage': stage,
-            'check_ins': Decimal(str(total)),
-        })
-    except Exception as e:
-        print(f"Plant update error: {e}")

@@ -2,6 +2,12 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: Wellnest Backend - Serverless wellness tracking API
 
+Parameters:
+  AnthropicApiKey:
+    Type: String
+    NoEcho: true
+    Description: Anthropic API key used by the insights function
+
 Globals:
   Function:
     Runtime: python3.11
@@ -100,24 +106,15 @@ Resources:
       CodeUri: handlers/
       Handler: plant.lambda_handler
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PlantTable
+        # The plant is computed from the user's entries.
+        - DynamoDBReadPolicy:
+            TableName: !Ref EntriesTable
       Events:
         GetPlant:
           Type: Api
           Properties:
             Path: /plant
             Method: GET
-        PostPlant:
-          Type: Api
-          Properties:
-            Path: /plant
-            Method: POST
-        PutPlant:
-          Type: Api
-          Properties:
-            Path: /plant
-            Method: PUT
 
   PatternsFunction:
     Type: AWS::Serverless::Function
@@ -126,18 +123,34 @@ Resources:
       CodeUri: handlers/
       Handler: patterns.lambda_handler
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PatternsTable
+        # Trigger counts are computed from the user's entries.
+        - DynamoDBReadPolicy:
+            TableName: !Ref EntriesTable
       Events:
         GetPatterns:
           Type: Api
           Properties:
             Path: /patterns
             Method: GET
-        PostPattern:
+
+  InsightsFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: wellnest-insights
+      CodeUri: handlers/
+      Handler: insights.lambda_handler
+      Timeout: 60
+      Environment:
+        Variables:
+          ANTHROPIC_API_KEY: !Ref AnthropicApiKey
+      Policies:
+        - DynamoDBReadPolicy:
+            TableName: !Ref EntriesTable
+      Events:
+        PostInsight:
           Type: Api
           Properties:
-            Path: /patterns
+            Path: /insights
             Method: POST
 
 Outputs:

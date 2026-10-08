@@ -10,11 +10,15 @@ Run with:  uvicorn server:app --host 0.0.0.0 --port 8080
 import os
 import sys
 
+import time
+
+from antithesis.assertions import always, reachable
 from fastapi import FastAPI, Request, Response
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'handlers'))
 
 import entries  # noqa: E402
+import insights  # noqa: E402
 import patterns  # noqa: E402
 import plant  # noqa: E402
 
@@ -23,6 +27,7 @@ ROUTES = {
     'entries': entries,
     'plant': plant,
     'patterns': patterns,
+    'insights': insights,
 }
 
 app = FastAPI()
@@ -53,7 +58,17 @@ async def dispatch(request: Request):
     if handler is None:
         return Response(status_code=404, content='{"error": "Not found"}', media_type='application/json')
 
-    result = handler.lambda_handler(await to_event(request), None)
+    # Bootstrap property: proves the Antithesis SDK and assertion cataloging work.
+    reachable("api dispatched a request to a handler", {"resource": resource})
+
+    event = await to_event(request)
+    started = time.monotonic()
+    result = handler.lambda_handler(event, None)
+    # API Gateway gives a Lambda 29 s to answer; this is the app's own share
+    # of a request's time, without network delay to or from the client.
+    seconds = round(time.monotonic() - started, 2)
+    always(seconds < 29, "API handler finishes within the 29 s gateway limit",
+           {'resource': resource, 'method': request.method, 'status': result['statusCode'], 'seconds': seconds})
 
     return Response(
         status_code=result['statusCode'],

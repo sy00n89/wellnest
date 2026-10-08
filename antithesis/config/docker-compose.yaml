@@ -1,0 +1,93 @@
+# Wellnest under Antithesis: the API, its database, the mock Anthropic API,
+# and the workload that drives and checks them. No frontend (no browser in
+# Antithesis) and no published ports.
+#
+# Build before launching:  docker compose -f antithesis/config/docker-compose.yaml build
+#
+# The project name differs from the root docker-compose.yaml ("wellnest") so the
+# two never share containers, networks, or volumes.
+name: wellnest-antithesis
+
+services:
+  dynamodb:
+    container_name: wellnest-antithesis-dynamodb
+    hostname: wellnest-antithesis-dynamodb
+    platform: linux/amd64
+    init: true
+    image: docker.io/amazon/dynamodb-local:3.3.1
+    # Default command keeps data in memory: every run starts empty.
+    environment:
+      NO_COLOR: "1"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s -o /dev/null http://localhost:8000"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+
+  anthropic-mock:
+    container_name: wellnest-antithesis-anthropic-mock
+    hostname: wellnest-antithesis-anthropic-mock
+    platform: linux/amd64
+    init: true
+    build:
+      context: ../../mocks/anthropic
+    image: wellnest-antithesis-anthropic-mock:latest
+    environment:
+      NO_COLOR: "1"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8080), 2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  api:
+    container_name: wellnest-antithesis-api
+    hostname: wellnest-antithesis-api
+    platform: linux/amd64
+    init: true
+    build:
+      context: ../../backend
+    image: wellnest-antithesis-api:latest
+    # 4 worker processes handle requests in parallel, like Lambda instances.
+    # The committed server handles one request at a time per process, which
+    # would hide the concurrency bugs (see scratchbook/deployment-topology.md).
+    command: ["sh", "-c", "python create_tables.py && exec uvicorn server:app --host 0.0.0.0 --port 8080 --workers 4"]
+    environment:
+      NO_COLOR: "1"
+      DYNAMODB_ENDPOINT: http://wellnest-antithesis-dynamodb:8000
+      ENTRIES_TABLE: wellnest-entries
+      PLANT_TABLE: wellnest-plant
+      PATTERNS_TABLE: wellnest-patterns
+      AWS_DEFAULT_REGION: us-east-1
+      AWS_ACCESS_KEY_ID: local
+      AWS_SECRET_ACCESS_KEY: local
+      ANTHROPIC_BASE_URL: http://wellnest-antithesis-anthropic-mock:8080
+      ANTHROPIC_API_KEY: not-a-real-key
+    depends_on:
+      dynamodb:
+        condition: service_healthy
+      anthropic-mock:
+        condition: service_healthy
+    healthcheck:
+      # 200 here means uvicorn is serving, dynamodb answers, and the tables exist.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8080/plant?user_id=healthcheck', timeout=2)"]
+      interval: 2s
+      timeout: 3s
+      retries: 60
+
+  workload:
+    container_name: wellnest-antithesis-workload
+    hostname: wellnest-antithesis-workload
+    platform: linux/amd64
+    init: true
+    build:
+      context: ../..
+      dockerfile: antithesis/Dockerfile
+      target: workload
+    image: wellnest-antithesis-workload:latest
+    environment:
+      NO_COLOR: "1"
+      API_URL: http://wellnest-antithesis-api:8080
+    depends_on:
+      api:
+        condition: service_healthy
