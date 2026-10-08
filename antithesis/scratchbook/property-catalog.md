@@ -1,6 +1,6 @@
 ---
 sut_path: /home/exedev/wellnest
-commit: 88857f47869f461dc752409275cdd4f71261b711
+commit: f572ccda04d4136a71d8aea57b73211e9b4447df
 updated: 2026-10-08
 external_references:
   - path: https://github.com/sy00n89/wellnest
@@ -58,7 +58,7 @@ Test commands in `antithesis/test/v1/wellnest/`: `parallel_driver_check_ins`, `p
 | `plant-update-never-fails-silently` | **Invalidated 2026-10-08** | — | No plant write path remains to fail |
 | `entries-read-available` | Implemented | helper_api | Green |
 | `no-500-for-valid-requests` | Implemented | helper_api | Green |
-| `requests-finish-within-gateway-limit` | Implemented, refined; **failing** | helper_api | Judges answered requests (3500a1b). Run cf988001: 1,793 answers after 29 s (e.g. POST /entries 201 after 31.6 s during ~32 s of back-to-back jammed/stopped faults). Wait-vs-fail-fast is an owner decision (see Open Questions) |
+| `requests-finish-within-gateway-limit` | Implemented, refined; residual failures **accepted as environmental** (owner, 2026-10-08) | helper_api | Judges answered requests (3500a1b). Run cf988001: 1,793 answers after 29 s (e.g. POST /entries 201 after 31.6 s during ~32 s of back-to-back jammed/stopped faults). Wait-vs-fail-fast is an owner decision (see Open Questions) |
 | `insights-never-500` | Implemented | insights | Found TimeoutError → 500 (local); fixed (20 s timeout, catch-all fallback); green |
 | `insights-fallback-exercised` | Implemented | insights.py (SUT) | Both Reachable markers hit |
 | `insights-normal-reply-parsed` | Implemented | insights | Hit |
@@ -70,7 +70,7 @@ Test commands in `antithesis/test/v1/wellnest/`: `parallel_driver_check_ins`, `p
 
 Later findings (2026-10-08, after the owner chose option B, fail fast):
 - `deleted-entry-stays-gone` failed in run 88ee0399 (79): a save delayed in a jammed network and retried reached DynamoDB after the entry was deleted and recreated it. Fixed with tombstones (deletes set `deleted = true`; reads skip them; c970649). Green in 683c30eb and 0f208a0a.
-- `requests-finish-within-gateway-limit` is now checked inside the API per handler (server.py), with DynamoDB fail-fast (2 s connect, 4 s read, 2 attempts, 503 when unreachable) and a 25 s insights deadline (8123d93). Latest run `0f208a0a494566f7cd9f8b80efb2b186-64-0`: 151 of 5,675 handlers over 29 s; the example examined overlapped repeated 5-10 s freezes of the whole API container (node-hang faults), which no in-process deadline can prevent. Open: accept as environmental, or shorten budgets further.
+- `requests-finish-within-gateway-limit` is now checked inside the API per handler (server.py), with DynamoDB fail-fast (2 s connect, 4 s read, 2 attempts, 503 when unreachable) and a 25 s insights deadline (8123d93). Latest run `0f208a0a494566f7cd9f8b80efb2b186-64-0`: 151 of 5,675 handlers over 29 s; the example examined overlapped repeated 5-10 s freezes of the whole API container (node-hang faults), which no in-process deadline can prevent. **Owner decision 2026-10-08: accepted as environmental.** Residual failures of this property under node-hang faults are expected and not treated as app bugs; budgets stay as they are. Only one of the 151 counterexamples was examined, so a new failure pattern (for example, without container freezes) should still be investigated.
 - End-of-run plant check now uses the same double-read guard as the mid-run check (88857f4).
 
 ### Ground rules every property relies on
@@ -423,5 +423,5 @@ These confirm the run reached the states the safety properties depend on.
 
 - Is clock jitter enabled for the tenant? `(needs human input)`
 - Is node termination enabled for the tenant? `(needs human input)`
-- Lower botocore retries/timeouts in the Antithesis env so dynamodb faults surface within fault windows? `(needs human input)`
+- Lower botocore retries/timeouts? Resolved 2026-10-08: owner chose fail fast (option B), now in `backend/handlers/aws.py` for all environments.
 - Weight the workload toward confirming the known bugs, or toward the new-discovery properties (evaluation bias B-2)? `(needs human input)`
