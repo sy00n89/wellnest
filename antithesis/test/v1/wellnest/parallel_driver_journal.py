@@ -130,10 +130,14 @@ def main():
     always(not resurrected, "a deleted check-in never appears in the list again",
            {'user_id': user_id, 'resurrected_ids': resurrected, 'deletes_acked': len(deleted_acked)})
 
+    # A request that timed out on our side can still finish on the server, so
+    # compare the plant only when the journal did not change around the read.
     check_ins = int(float(plant.get('check_ins', 0)))
-    always(check_ins == len(listed), "plant check-in count equals the number of listed entries",
-           {'user_id': user_id, 'plant_check_ins': check_ins, 'listed': len(listed),
-            'deletes_acked': len(deleted_acked), 'unknown_creates': unknown_creates})
+    listed_again = api.list_entries(user_id)
+    if listed_again is not None and {e['id'] for e in listed_again} == listed_ids:
+        always(check_ins == len(listed), "plant check-in count equals the number of listed entries",
+               {'user_id': user_id, 'plant_check_ins': check_ins, 'listed': len(listed),
+                'deletes_acked': len(deleted_acked), 'unknown_creates': unknown_creates})
 
     for trigger in sorted(set(triggers_acked) | set(triggers_unknown) | set(frequencies)):
         dec_acked = sum(1 for i in deleted_acked if trigger in entry_triggers.get(i, []))

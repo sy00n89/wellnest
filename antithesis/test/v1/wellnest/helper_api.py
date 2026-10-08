@@ -45,7 +45,11 @@ def request(method, path, body=None, judge=True):
         outcome, status, _ = result
         elapsed = round(time.monotonic() - started, 2)
         details = {'method': method, 'path': path.split('?')[0], 'status': status, 'seconds': elapsed}
-        always(elapsed < TIMEOUT_SECONDS, "API request finishes within the 29 s gateway limit", details)
+        # A request with no answer at all is usually the network or a paused
+        # container (recorded as UNKNOWN); an answer that took 29 s or more
+        # would have been cut off by API Gateway in production.
+        always(status is None or elapsed < TIMEOUT_SECONDS,
+               "API answers within the 29 s gateway limit whenever it answers", details)
         always(status is None or status < 500, "API never answers a valid request with a server error",
                details)
         if method == 'GET' and path.startswith('/entries'):
