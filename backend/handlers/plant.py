@@ -1,6 +1,7 @@
 import json
 from decimal import Decimal
 
+import aws
 import entry_queries
 from plant_stages import plant_stage
 
@@ -29,7 +30,7 @@ def lambda_handler(event, context):
         else:
             return {'statusCode': 405, 'headers': cors_headers(), 'body': json.dumps({'error': 'Method not allowed'})}
     except Exception as e:
-        return {'statusCode': 500, 'headers': cors_headers(), 'body': json.dumps({'error': str(e)})}
+        return aws.error_response(e, cors_headers())
 
 def get_plant(event):
     """The plant is computed from the user's entries on every read.

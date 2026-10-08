@@ -5,10 +5,10 @@ LastEvaluatedKey until the last page.
 """
 import os
 
-import boto3
 from boto3.dynamodb.conditions import Key
 
-dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
+from aws import dynamodb
+
 entries_table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
 
 

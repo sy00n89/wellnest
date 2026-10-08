@@ -2,11 +2,11 @@ import json
 import os
 import urllib.request
 
-import boto3
 from antithesis.assertions import reachable
 from boto3.dynamodb.conditions import Key
 
-dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
+import aws
+from aws import dynamodb
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
 
 # Point ANTHROPIC_BASE_URL at the mock in docker-compose; defaults to the real API.
@@ -15,8 +15,9 @@ ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-5')
 
 FALLBACK_TEXT = 'Unable to generate insight right now. Please try again.'
 
-# API Gateway ends requests at 29 s, so the Anthropic call must give up well before that.
-ANTHROPIC_TIMEOUT_SECONDS = 20
+# API Gateway ends requests at 29 s; with DynamoDB's fail-fast budget (see aws.py)
+# the Anthropic call must give up well before that.
+ANTHROPIC_TIMEOUT_SECONDS = 10
 
 def cors_headers():
     return {
@@ -37,7 +38,7 @@ def lambda_handler(event, context):
         else:
             return {'statusCode': 405, 'headers': cors_headers(), 'body': json.dumps({'error': 'Method not allowed'})}
     except Exception as e:
-        return {'statusCode': 500, 'headers': cors_headers(), 'body': json.dumps({'error': str(e)})}
+        return aws.error_response(e, cors_headers())
 
 def generate_insight(event):
     body = json.loads(event.get('body') or '{}')

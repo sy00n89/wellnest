@@ -532,25 +532,25 @@ const CheckInScreen = ({ onSubmit, entries = [] }) => {
       setPendingEntry(entry);
       setShowAppraisal(true);
     } else {
-      onSubmit(entry);
+      if (!(await onSubmit(entry))) return;
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
       setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     }
   };
 
-  const handleAppraisalComplete = (appraisalData) => {
+  const handleAppraisalComplete = async (appraisalData) => {
     setShowAppraisal(false);
-    onSubmit({ ...pendingEntry, ...appraisalData });
+    if (!(await onSubmit({ ...pendingEntry, ...appraisalData }))) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
     setPendingEntry(null);
   };
 
-  const handleAppraisalSkip = () => {
+  const handleAppraisalSkip = async () => {
     setShowAppraisal(false);
-    onSubmit(pendingEntry);
+    if (!(await onSubmit(pendingEntry))) return;
     setSaved(true);
     setTimeout(() => setSaved(false), 3000);
     setMood(null); setStress(5); setSigns([]); setTriggers([]); setNotes(""); setVulnerabilities({});
@@ -1568,6 +1568,7 @@ export default function App() {
   const [entries, setEntries] = useState([]);
   const [plantData, setPlantData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
   const loadData = async () => {
     setLoading(true);
@@ -1576,12 +1577,14 @@ export default function App() {
         fetch(`${API_BASE}/entries?user_id=${USER_ID}`),
         fetch(`${API_BASE}/plant?user_id=${USER_ID}`),
       ]);
-      const entriesData = await entriesRes.json();
-      const plantDataJson = await plantRes.json();
-      setEntries(Array.isArray(entriesData) ? entriesData : []);
-      setPlantData(plantDataJson);
+      // On a failed load, keep showing what we had rather than an empty journal.
+      if (!entriesRes.ok || !plantRes.ok) throw new Error(`load failed: ${entriesRes.status}/${plantRes.status}`);
+      setEntries(await entriesRes.json());
+      setPlantData(await plantRes.json());
+      setError("");
     } catch (err) {
       console.error("Error loading data:", err);
+      setError("Couldn't reach Wellnest to load your journal. Please try again in a moment.");
     } finally {
       setLoading(false);
     }
@@ -1592,28 +1595,33 @@ export default function App() {
     setScreen("checkin");
   };
 
+  // Returns true when the check-in was saved, so the form knows whether to clear.
   const handleSubmitEntry = async (entry) => {
     try {
-      await fetch(`${API_BASE}/entries`, {
+      const res = await fetch(`${API_BASE}/entries`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ...entry, user_id: USER_ID }),
       });
-
-      // The server updates trigger counts as part of saving the entry.
-
+      if (!res.ok) throw new Error(`save failed: ${res.status}`);
+      setError("");
       await loadData();
+      return true;
     } catch (err) {
       console.error("Error saving entry:", err);
+      setError("Couldn't save your check-in. Please try again in a moment.");
+      return false;
     }
   };
 
   const handleDelete = async (id) => {
     try {
-      await fetch(`${API_BASE}/entries/${id}?user_id=${USER_ID}`, { method: "DELETE" });
+      const res = await fetch(`${API_BASE}/entries/${id}?user_id=${USER_ID}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(`delete failed: ${res.status}`);
       await loadData();
     } catch (err) {
       console.error("Error deleting entry:", err);
+      setError("Couldn't delete that entry. Please try again in a moment.");
     }
   };
 
@@ -1641,6 +1649,15 @@ export default function App() {
       <div className="wn-app wn-center" style={{ paddingBottom: 0 }}>
         {loading && (
           <div style={{ position: "fixed", top: 0, left: 0, right: 0, height: 3, background: T.sage, zIndex: 999, opacity: 0.8 }} />
+        )}
+        {error && (
+          <div role="alert" onClick={() => setError("")} style={{
+            position: "fixed", top: 12, left: 16, right: 16, zIndex: 1000, cursor: "pointer",
+            background: T.surface, border: `1px solid ${T.clay}`, borderRadius: 12,
+            padding: "12px 16px", fontSize: 14, color: T.textPrimary, boxShadow: "0 4px 16px rgba(0,0,0,0.08)",
+          }}>
+            {error} <span style={{ color: T.textMuted }}>(tap to dismiss)</span>
+          </div>
         )}
         {screen === "checkin" && <CheckInScreen onSubmit={handleSubmitEntry} entries={entries} />}
         {screen === "insights" && <InsightsScreen entries={entries} />}

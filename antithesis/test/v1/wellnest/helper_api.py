@@ -13,7 +13,7 @@ import time
 import urllib.error
 import urllib.request
 
-from antithesis.assertions import always
+from antithesis.assertions import always, sometimes
 
 API_URL = os.environ.get('API_URL', 'http://wellnest-antithesis-api:8080')
 
@@ -50,12 +50,12 @@ def request(method, path, body=None, judge=True):
         # would have been cut off by API Gateway in production.
         always(status is None or elapsed < TIMEOUT_SECONDS,
                "API answers within the 29 s gateway limit whenever it answers", details)
-        always(status is None or status < 500, "API never answers a valid request with a server error",
-               details)
+        # 503 is the intended fail-fast answer when DynamoDB is unreachable
+        # (owner decision, option B); 500 means something unexpected broke.
+        always(status != 500, "API never answers a valid request with an internal error (500)", details)
         if method == 'GET' and path.startswith('/entries'):
-            # The app shows an empty history when this read fails.
-            always(status is None or status < 500, "reading a journal never fails with a server error",
-                   details)
+            always(status != 500, "reading a journal never fails with an internal error (500)", details)
+        sometimes(status == 503, "API answered 503 'try again' while the database was unreachable", details)
     return result
 
 

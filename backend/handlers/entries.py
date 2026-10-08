@@ -4,11 +4,11 @@ import uuid
 import time
 from decimal import Decimal
 from datetime import datetime, timezone
-import boto3
 
 import entry_queries
 
-dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
+import aws
+from aws import dynamodb
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
 
 class DecimalEncoder(json.JSONEncoder):
@@ -41,7 +41,7 @@ def lambda_handler(event, context):
         else:
             return {'statusCode': 405, 'headers': cors_headers(), 'body': json.dumps({'error': 'Method not allowed'})}
     except Exception as e:
-        return {'statusCode': 500, 'headers': cors_headers(), 'body': json.dumps({'error': str(e)})}
+        return aws.error_response(e, cors_headers())
 
 def get_entries(event):
     params = event.get('queryStringParameters') or {}
