@@ -53,3 +53,31 @@ def test_unexpected_reply_shape_returns_fallback(monkeypatch):
     status, body = call(insights, 'POST', {})
     assert status == 200
     assert body['text'] == insights.FALLBACK_TEXT
+
+
+class TricklingAnthropic(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.send_response(200)
+        self.send_header('Content-Length', '1000')
+        self.end_headers()
+        for _ in range(1000):          # a byte every 0.3 s: never idle long enough to time out
+            self.wfile.write(b' ')
+            self.wfile.flush()
+            time.sleep(0.3)
+
+    def log_message(self, *args):
+        pass
+
+
+def test_slowly_trickling_anthropic_stays_within_the_deadline(monkeypatch):
+    # A reply that arrives a little at a time never trips a per-read timeout,
+    # so insights took 31 s under Antithesis network slowdowns.
+    server = start_server(TricklingAnthropic)
+    monkeypatch.setattr(insights, 'ANTHROPIC_BASE_URL', f'http://127.0.0.1:{server.server_port}')
+    monkeypatch.setattr(insights, 'DEADLINE_SECONDS', 3)
+
+    started = time.monotonic()
+    status, body = call(insights, 'POST', {})
+    assert status == 200
+    assert body['text'] == insights.FALLBACK_TEXT
+    assert time.monotonic() - started < 5

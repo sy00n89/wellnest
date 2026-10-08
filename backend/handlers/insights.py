@@ -1,5 +1,6 @@
 import json
 import os
+import time
 import urllib.request
 
 from antithesis.assertions import reachable
@@ -13,9 +14,10 @@ ANTHROPIC_MODEL = os.environ.get('ANTHROPIC_MODEL', 'claude-sonnet-5')
 
 FALLBACK_TEXT = 'Unable to generate insight right now. Please try again.'
 
-# API Gateway ends requests at 29 s; with DynamoDB's fail-fast budget (see aws.py)
-# the Anthropic call must give up well before that.
-ANTHROPIC_TIMEOUT_SECONDS = 10
+# API Gateway ends requests at 29 s. The whole insights request gets 25 s, and
+# the Anthropic call gets whatever is left after reading the entries.
+DEADLINE_SECONDS = 25
+ANTHROPIC_TIMEOUT_SECONDS = 10   # per network wait; the deadline caps the total
 
 def cors_headers():
     return {
@@ -39,6 +41,7 @@ def lambda_handler(event, context):
         return aws.error_response(e, cors_headers())
 
 def generate_insight(event):
+    deadline = time.monotonic() + DEADLINE_SECONDS
     body = json.loads(event.get('body') or '{}')
     user_id = body.get('user_id', 'default')
 
@@ -46,7 +49,7 @@ def generate_insight(event):
     entries = sorted(entry_queries.all_entries(user_id),
                      key=lambda x: x.get('timestamp', 0), reverse=True)[:14]
 
-    text = call_anthropic(build_prompt(entries))
+    text = call_anthropic(build_prompt(entries), deadline)
 
     return {
         'statusCode': 200,
@@ -54,7 +57,7 @@ def generate_insight(event):
         'body': json.dumps({'text': text})
     }
 
-def call_anthropic(prompt):
+def call_anthropic(prompt, deadline):
     request = urllib.request.Request(
         f'{ANTHROPIC_BASE_URL}/v1/messages',
         data=json.dumps({
@@ -70,8 +73,11 @@ def call_anthropic(prompt):
         method='POST',
     )
     try:
-        with urllib.request.urlopen(request, timeout=ANTHROPIC_TIMEOUT_SECONDS) as reply:
-            data = json.loads(reply.read())
+        remaining = deadline - time.monotonic()
+        if remaining < 1:
+            raise TimeoutError('no time left for the Anthropic call')
+        with urllib.request.urlopen(request, timeout=min(ANTHROPIC_TIMEOUT_SECONDS, remaining)) as reply:
+            data = json.loads(read_before(reply, deadline))
         content = data.get('content') or [{}]
         text = content[0].get('text')
     except Exception as e:
@@ -85,6 +91,17 @@ def call_anthropic(prompt):
         reachable("insights fallback: empty text", {})
         return FALLBACK_TEXT
     return text
+
+def read_before(reply, deadline):
+    """Read the whole reply, giving up at the deadline even if data keeps trickling in."""
+    chunks = []
+    while True:
+        if time.monotonic() > deadline:
+            raise TimeoutError('Anthropic reply did not finish before the deadline')
+        chunk = reply.read1(65536)
+        if not chunk:
+            return b''.join(chunks)
+        chunks.append(chunk)
 
 def join_or_none(values):
     return ', '.join(values or []) or 'none'
