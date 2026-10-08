@@ -83,13 +83,6 @@ def delete_entry(user_id, entry_id):
     return outcome, status
 
 
-def post_pattern(user_id, trigger, stress_level):
-    """POST /patterns, as the browser does once per trigger after a check-in."""
-    outcome, _, _ = request('POST', '/patterns',
-                            {'user_id': user_id, 'trigger': trigger, 'stress_level': stress_level})
-    return outcome
-
-
 def read_with_retry(path, accept, attempts=20):
     for attempt in range(attempts):
         outcome, _, body = request('GET', path)

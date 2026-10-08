@@ -2,7 +2,7 @@
 """A user's journal under a mix of check-ins and deletes, done the way the browser does them.
 
 One invocation = one fresh user. Several threads concurrently:
-  - check in: POST /entries (the server also counts the entry's triggers)
+  - check in: POST /entries (the plant and trigger counts are computed from entries)
   - delete: DELETE /entries/{id} of an entry this user has, acknowledged or seen
     in a list
 When all threads finish nobody else touches this user, so the journal must be

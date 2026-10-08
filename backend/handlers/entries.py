@@ -5,11 +5,8 @@ import time
 from decimal import Decimal
 from datetime import datetime, timezone
 import boto3
-from antithesis.assertions import unreachable
-from boto3.dynamodb.conditions import Key
 
-import pattern_counts
-from plant_stages import plant_stage  # noqa: F401  (used by tests)
+import entry_queries
 
 dynamodb = boto3.resource('dynamodb', endpoint_url=os.environ.get('DYNAMODB_ENDPOINT'))
 table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
@@ -50,11 +47,7 @@ def get_entries(event):
     params = event.get('queryStringParameters') or {}
     user_id = params.get('user_id', 'default')
 
-    response = table.query(
-        KeyConditionExpression=Key('user_id').eq(user_id)
-    )
-
-    entries = response.get('Items', [])
+    entries = entry_queries.all_entries(user_id)
     entries.sort(key=lambda x: x.get('timestamp', 0), reverse=True)
 
     return {
@@ -91,11 +84,9 @@ def create_entry(event):
         'vulnerability_factors': body.get('vulnerability_factors', {}),
     }
 
+    # The plant and trigger counts are computed from entries when read, so
+    # saving the entry is the only write.
     put_new_entry(item)
-
-    # Update plant and trigger counts after entry
-    update_plant(user_id, +1)
-    update_trigger_counts(user_id, item, +1)
 
     return {
         'statusCode': 201,
@@ -139,10 +130,7 @@ def delete_entry(event):
         return {'statusCode': 400, 'headers': cors_headers(), 'body': json.dumps({'error': 'Missing entry id'})}
 
     # Find the entry by id to get its timestamp
-    response = table.query(
-        KeyConditionExpression=Key('user_id').eq(user_id)
-    )
-    entries = response.get('Items', [])
+    entries = entry_queries.all_entries(user_id)
     entry = next((e for e in entries if e.get('id') == entry_id), None)
 
     if not entry:
@@ -152,39 +140,8 @@ def delete_entry(event):
         Key={'user_id': user_id, 'timestamp': entry['timestamp']}
     )
 
-    # Update plant and trigger counts after delete
-    update_plant(user_id, -1)
-    update_trigger_counts(user_id, entry, -1)
-
     return {
         'statusCode': 200,
         'headers': cors_headers(),
         'body': json.dumps({'message': 'Entry deleted'})
     }
-
-def update_trigger_counts(user_id, entry, direction):
-    """Count (+1) or uncount (-1) an entry's triggers in the patterns table."""
-    try:
-        pattern_counts.adjust(user_id, entry.get('triggers', []),
-                              entry.get('stress_level', 5), direction)
-    except Exception as e:
-        print(f"Trigger count update error: {e}")
-        unreachable("trigger counts failed to update after an entry change", {'error': type(e).__name__})
-
-def update_plant(user_id, direction):
-    """Count (+1) or uncount (-1) one check-in on the user's plant.
-
-    An atomic ADD rather than a recount: concurrent recounts could finish out
-    of order and leave a stale count. The stage is derived from the count
-    when the plant is read.
-    """
-    try:
-        plant_table = dynamodb.Table(os.environ['PLANT_TABLE'])
-        plant_table.update_item(
-            Key={'user_id': user_id},
-            UpdateExpression='ADD check_ins :d',
-            ExpressionAttributeValues={':d': Decimal(direction)},
-        )
-    except Exception as e:
-        print(f"Plant update error: {e}")
-        unreachable("plant failed to update after an entry change", {'error': type(e).__name__})

@@ -82,11 +82,6 @@ Resources:
       Policies:
         - DynamoDBCrudPolicy:
             TableName: !Ref EntriesTable
-        # entries.py also updates the plant and trigger counts
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PlantTable
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PatternsTable
       Events:
         GetEntries:
           Type: Api
@@ -111,24 +106,15 @@ Resources:
       CodeUri: handlers/
       Handler: plant.lambda_handler
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PlantTable
+        # The plant is computed from the user's entries.
+        - DynamoDBReadPolicy:
+            TableName: !Ref EntriesTable
       Events:
         GetPlant:
           Type: Api
           Properties:
             Path: /plant
             Method: GET
-        PostPlant:
-          Type: Api
-          Properties:
-            Path: /plant
-            Method: POST
-        PutPlant:
-          Type: Api
-          Properties:
-            Path: /plant
-            Method: PUT
 
   PatternsFunction:
     Type: AWS::Serverless::Function
@@ -137,19 +123,15 @@ Resources:
       CodeUri: handlers/
       Handler: patterns.lambda_handler
       Policies:
-        - DynamoDBCrudPolicy:
-            TableName: !Ref PatternsTable
+        # Trigger counts are computed from the user's entries.
+        - DynamoDBReadPolicy:
+            TableName: !Ref EntriesTable
       Events:
         GetPatterns:
           Type: Api
           Properties:
             Path: /patterns
             Method: GET
-        PostPattern:
-          Type: Api
-          Properties:
-            Path: /patterns
-            Method: POST
 
   InsightsFunction:
     Type: AWS::Serverless::Function

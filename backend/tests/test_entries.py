@@ -1,7 +1,7 @@
 import entries
-import pattern_counts
 import patterns
 import plant
+from plant_stages import plant_stage
 from conftest import call
 
 
@@ -32,7 +32,7 @@ def test_plant_stage_every_20_check_ins():
         80: 'mature_tree', 200: 'mature_tree',
     }
     for total, stage in expected.items():
-        assert entries.plant_stage(total) == stage, total
+        assert plant_stage(total) == stage, total
 
 
 def test_delete_updates_plant():
@@ -72,16 +72,6 @@ def test_delete_lowers_trigger_counts():
     assert frequency == {'work': 1}  # 'sleep' reached zero and is not shown
 
 
-def test_trigger_counts_balance_in_any_order():
-    # A delete's -1 can arrive before its check-in's +1 (found by Antithesis).
-    # Counts are add-only, so the order must not matter.
-    pattern_counts.adjust('default', ['work'], 5, -1)
-    pattern_counts.adjust('default', ['work'], 5, +1)
-
-    _, counts = call(patterns, 'GET')
-    assert counts == []
-
-
 def test_same_millisecond_check_ins_are_both_kept(monkeypatch):
     # Two check-ins in the same millisecond used to share a database key,
     # so the second silently overwrote the first (found by Antithesis).
@@ -94,14 +84,14 @@ def test_same_millisecond_check_ins_are_both_kept(monkeypatch):
     assert {e['id'] for e in listed} == {first['id'], second['id']}
 
 
-def test_plant_count_balances_in_any_order():
-    # Concurrent deletes each recounted entries and the last, stale recount
-    # won (found by Antithesis: 9 entries, plant said 10). The count now only
-    # moves by +1/-1, so the order of updates must not matter.
-    entries.update_plant('default', -1)
-    entries.update_plant('default', +1)
-    entries.update_plant('default', +1)
+def test_plant_and_trigger_counts_always_match_entries():
+    # Stored counts drifted under concurrency and retried writes (found by
+    # Antithesis). They are now computed from the entries on every read.
+    ids = [call(entries, 'POST', {'triggers': ['work']})[1]['id'] for _ in range(25)]
+    for entry_id in ids[:3]:
+        call(entries, 'DELETE', path_id=entry_id)
 
     _, p = call(plant, 'GET')
-    assert p['check_ins'] == 1
-    assert p['stage'] == 'sprout'
+    assert (p['check_ins'], p['stage']) == (22, 'seedling')
+    _, counts = call(patterns, 'GET')
+    assert [(c['trigger'], c['frequency']) for c in counts] == [('work', 22)]
