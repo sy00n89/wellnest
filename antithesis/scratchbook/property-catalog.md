@@ -1,7 +1,7 @@
 ---
 sut_path: /home/exedev/wellnest
-commit: 7b07b302e7a2eb842c088fea21ba38018bafc43d
-updated: 2026-10-06
+commit: 3500a1bd810526b7cc59ad4cd9e10b1b972bb84d
+updated: 2026-10-08
 external_references:
   - path: https://github.com/sy00n89/wellnest
     why: Upstream repo named by the user as the outside source; checked for issues, PRs, and wiki (no issues, no wiki, one merged PR #1 "local dev").
@@ -39,6 +39,36 @@ guards and coverage guidance.
 | `unknown-outcome-create-explored` | Liveness | P2 | Sometimes |
 | `delete-of-existing-entry-occurs` | Liveness | P2 | Sometimes |
 | `plant-reaches-later-stage` | Liveness | P2 | Sometimes |
+
+### Implementation status (2026-10-08)
+
+Test commands in `antithesis/test/v1/wellnest/`: `parallel_driver_check_ins`, `parallel_driver_journal`, `parallel_driver_insights`, `eventually_api_recovers`, `finally_journals_consistent`; guard and production-limit checks live in `helper_api.py`.
+
+| Slug | Status | Where | Result |
+|---|---|---|---|
+| `acked-entry-is-listed` | Implemented | check_ins, journal, finally | Found same-ms overwrite (run d58ab81e); fixed, green since 38440dda |
+| `concurrent-creates-all-retained` | Implemented (via check_ins burst) | check_ins | Green after fix |
+| `deleted-entry-stays-gone` | Implemented | journal, finally | Green |
+| `entry-ids-unique-in-list` | Implemented (guard) | helper_api | Green |
+| `user-entries-isolated` | Implemented (guard) | helper_api | Green |
+| `plant-checkins-match-entry-count` | Implemented | journal, finally | Found recount race (fa7252e5) and double-counted retries (3b96068a); fixed by computing the plant from entries (6cb7fdb) |
+| `plant-stage-matches-checkins` | Implemented (guard) | helper_api | Green |
+| `pattern-increments-not-lost` | **Invalidated 2026-10-08** | — | Trigger counts are computed from entries; POST /patterns removed. Lost-update bug found locally and fixed before invalidation |
+| `pattern-frequency-tracks-acked-triggers` | Implemented | journal | Found stale counts after deletes (local); fixed; green |
+| `plant-update-never-fails-silently` | **Invalidated 2026-10-08** | — | No plant write path remains to fail |
+| `entries-read-available` | Implemented | helper_api | Green |
+| `no-500-for-valid-requests` | Implemented | helper_api | Green |
+| `requests-finish-within-gateway-limit` | Implemented, refined; **failing** | helper_api | Judges answered requests (3500a1b). Run cf988001: 1,793 answers after 29 s (e.g. POST /entries 201 after 31.6 s during ~32 s of back-to-back jammed/stopped faults). Wait-vs-fail-fast is an owner decision (see Open Questions) |
+| `insights-never-500` | Implemented | insights | Found TimeoutError → 500 (local); fixed (20 s timeout, catch-all fallback); green |
+| `insights-fallback-exercised` | Implemented | insights.py (SUT) | Both Reachable markers hit |
+| `insights-normal-reply-parsed` | Implemented | insights | Hit |
+| `api-recovers-after-faults` | Implemented | eventually_api_recovers | Green |
+| `same-millisecond-creates-occur` | Implemented | check_ins | Hit |
+| `unknown-outcome-create-explored` | Implemented | journal | Hit |
+| `delete-of-existing-entry-occurs` | Implemented | journal | Hit |
+| `plant-reaches-later-stage` | Implemented | journal | Hit (seedling) |
+
+Latest full run: `cf98800188c5d337790acd0a0e00e9d1-64-0` (2026-10-08): every Wellnest property passing except `requests-finish-within-gateway-limit`.
 
 ### Ground rules every property relies on
 
