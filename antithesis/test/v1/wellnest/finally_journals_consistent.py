@@ -31,12 +31,17 @@ def main():
         missing = sorted(set(record['present']) - listed_ids)
         back = sorted(set(record['absent']) & listed_ids)
         check_ins = int(float(plant.get('check_ins', 0)))
+        # A request whose client gave up can still finish on the server, so
+        # judge the plant only if the journal did not change around the read.
+        listed_again = api.list_entries(user_id, attempts=60)
+        plant_comparable = listed_again is not None and {e['id'] for e in listed_again} == listed_ids
         always(not missing and not back,
                "at the end of the run, every journal still has exactly its expected entries",
                {'user_id': user_id, 'missing_ids': missing, 'deleted_but_listed': back})
-        always(check_ins == len(listed),
-               "at the end of the run, every plant count equals its journal's entries",
-               {'user_id': user_id, 'plant_check_ins': check_ins, 'listed': len(listed)})
+        if plant_comparable:
+            always(check_ins == len(listed),
+                   "at the end of the run, every plant count equals its journal's entries",
+                   {'user_id': user_id, 'plant_check_ins': check_ins, 'listed': len(listed)})
     sometimes(checked >= 3, "end-of-run check re-verified 3+ journals", {'checked': checked})
     print(f'finally: checked {checked} of {len(records)} journals')
 
