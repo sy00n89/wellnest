@@ -35,7 +35,9 @@ def main():
             print(f'{user_id}: insights request got no response (timeout or connection error)')
             continue
         text = body.get('text') if isinstance(body, dict) else None
-        always(status == 200 and bool(text), "insights request returns 200 with text",
+        # 503 is the intended answer while the database is unreachable (option B).
+        always((status == 200 and bool(text)) or status == 503,
+               "insights request returns text, or 503 while the database is unreachable",
                {'user_id': user_id, 'status': status, 'outcome': outcome})
         if text:
             sometimes(all(label in text for label in SECTION_LABELS),

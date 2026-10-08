@@ -3,11 +3,9 @@ import os
 import urllib.request
 
 from antithesis.assertions import reachable
-from boto3.dynamodb.conditions import Key
 
 import aws
-from aws import dynamodb
-table = dynamodb.Table(os.environ['ENTRIES_TABLE'])
+import entry_queries
 
 # Point ANTHROPIC_BASE_URL at the mock in docker-compose; defaults to the real API.
 ANTHROPIC_BASE_URL = os.environ.get('ANTHROPIC_BASE_URL', 'https://api.anthropic.com')
@@ -45,8 +43,8 @@ def generate_insight(event):
     user_id = body.get('user_id', 'default')
 
     # The server reads the entries itself rather than trusting a prompt from the browser.
-    response = table.query(KeyConditionExpression=Key('user_id').eq(user_id))
-    entries = sorted(response.get('Items', []), key=lambda x: x.get('timestamp', 0), reverse=True)[:14]
+    entries = sorted(entry_queries.all_entries(user_id),
+                     key=lambda x: x.get('timestamp', 0), reverse=True)[:14]
 
     text = call_anthropic(build_prompt(entries))
 

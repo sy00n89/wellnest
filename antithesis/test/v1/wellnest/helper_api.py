@@ -36,8 +36,8 @@ def expected_stage(check_ins):
 def request(method, path, body=None, judge=True):
     """Send one request. Returns (outcome, status, decoded_body_or_None).
 
-    With judge=True (the default) every response is also checked against the
-    production limits: an answer within API Gateway's 29 s, and no 5xx.
+    With judge=True (the default) every response is also checked: no 500,
+    and the 503 fail-fast path is recorded as reached.
     """
     started = time.monotonic()
     result = _send(method, path, body)
@@ -45,11 +45,8 @@ def request(method, path, body=None, judge=True):
         outcome, status, _ = result
         elapsed = round(time.monotonic() - started, 2)
         details = {'method': method, 'path': path.split('?')[0], 'status': status, 'seconds': elapsed}
-        # A request with no answer at all is usually the network or a paused
-        # container (recorded as UNKNOWN); an answer that took 29 s or more
-        # would have been cut off by API Gateway in production.
-        always(status is None or elapsed < TIMEOUT_SECONDS,
-               "API answers within the 29 s gateway limit whenever it answers", details)
+        # The 29 s gateway limit is checked inside the API (server.py), where
+        # network delay between this client and the API is not counted.
         # 503 is the intended fail-fast answer when DynamoDB is unreachable
         # (owner decision, option B); 500 means something unexpected broke.
         always(status != 500, "API never answers a valid request with an internal error (500)", details)

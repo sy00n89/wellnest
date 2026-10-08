@@ -95,3 +95,21 @@ def test_plant_and_trigger_counts_always_match_entries():
     assert (p['check_ins'], p['stage']) == (22, 'seedling')
     _, counts = call(patterns, 'GET')
     assert [(c['trigger'], c['frequency']) for c in counts] == [('work', 22)]
+
+
+def test_late_duplicate_save_cannot_bring_back_a_deleted_entry():
+    # A save whose first copy was delayed in the network (and retried) can
+    # arrive after the user deleted the entry (found by Antithesis). Replaying
+    # that exact write must not resurrect it.
+    _, created = call(entries, 'POST', {'mood': 'good'})
+    stored = entries.table.query(
+        KeyConditionExpression='user_id = :u', ExpressionAttributeValues={':u': 'default'}
+    )['Items'][0]
+
+    call(entries, 'DELETE', path_id=created['id'])
+    entries.put_new_entry(dict(stored))   # the delayed duplicate arrives
+
+    _, listed = call(entries, 'GET')
+    assert listed == []
+    _, p = call(plant, 'GET')
+    assert p['check_ins'] == 0

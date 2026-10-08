@@ -111,7 +111,8 @@ def put_new_entry(item, max_attempts=100):
             return
         except table.meta.client.exceptions.ConditionalCheckFailedException:
             # boto3 retries a put whose reply was lost; if the slot already
-            # holds this very entry, that earlier attempt succeeded.
+            # holds this very entry (even one since deleted), that earlier
+            # attempt succeeded and nothing more should be written.
             existing = table.get_item(
                 Key={'user_id': item['user_id'], 'timestamp': item['timestamp']}
             ).get('Item')
@@ -136,8 +137,12 @@ def delete_entry(event):
     if not entry:
         return {'statusCode': 404, 'headers': cors_headers(), 'body': json.dumps({'error': 'Entry not found'})}
 
-    table.delete_item(
-        Key={'user_id': user_id, 'timestamp': entry['timestamp']}
+    # Mark rather than erase: a delayed duplicate of the original save could
+    # otherwise arrive later, find the slot free, and bring the entry back.
+    table.update_item(
+        Key={'user_id': user_id, 'timestamp': entry['timestamp']},
+        UpdateExpression='SET deleted = :true',
+        ExpressionAttributeValues={':true': True},
     )
 
     return {
