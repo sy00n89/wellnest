@@ -8,9 +8,6 @@ Use `snouty launch --json --webhook basic_test --config antithesis/config` to st
 **snouty validate**
 Use this command to quickly validate changes to the Antithesis scaffolding. See `snouty validate --help` for details.
 
-**setup-complete.sh**
-Inject this script into a Dockerfile to notify Antithesis that setup is complete. This script should only run once the system under test is ready for testing. Antithesis will not run any test commands until it receives this event.
-
 **config**
 This directory contains the `docker-compose.yaml` file used to bring up this system within the Antithesis environment, along with any closely related config files. Snouty will push tagged images, consume this config directory, and launch the run.
 

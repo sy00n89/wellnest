@@ -28,3 +28,7 @@ dist-ssr
 # Python
 .venv
 __pycache__/
+
+# Build output
+dist.zip
+backend/.aws-sam/

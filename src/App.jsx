@@ -186,23 +186,6 @@ const stressColor = (n) => {
 };
 
 // ── Mock Data ─────────────────────────────────────────────────────────────────
-const MOCK_ENTRIES = [
-  { id: "1", date: (() => { const d=new Date(); d.setDate(d.getDate()-0); return d.toISOString().split("T")[0]; })(), time: "21:15", mood: "stressed", stress_level: 7, triggers: ["Work deadline"], physical_signs: ["Neck tension", "Headache"], notes: "Big presentation tomorrow." },
-  { id: "2", date: (() => { const d=new Date(); d.setDate(d.getDate()-1); return d.toISOString().split("T")[0]; })(), time: "20:00", mood: "anxious", stress_level: 6, triggers: ["Sleep deprivation"], physical_signs: ["Fatigue"], notes: "" },
-  { id: "3", date: (() => { const d=new Date(); d.setDate(d.getDate()-2); return d.toISOString().split("T")[0]; })(), time: "19:30", mood: "neutral", stress_level: 4, triggers: [], physical_signs: [], notes: "Quiet day." },
-  { id: "4", date: (() => { const d=new Date(); d.setDate(d.getDate()-3); return d.toISOString().split("T")[0]; })(), time: "22:00", mood: "overwhelmed", stress_level: 9, triggers: ["Work deadline", "Relationship"], physical_signs: ["Neck tension", "Restlessness", "Headache"], notes: "Everything hit at once." },
-  { id: "5", date: (() => { const d=new Date(); d.setDate(d.getDate()-4); return d.toISOString().split("T")[0]; })(), time: "18:45", mood: "calm", stress_level: 2, triggers: [], physical_signs: [], notes: "Good walk in the evening." },
-  { id: "6", date: (() => { const d=new Date(); d.setDate(d.getDate()-5); return d.toISOString().split("T")[0]; })(), time: "20:30", mood: "worried", stress_level: 5, triggers: ["Financial"], physical_signs: ["Fatigue"], notes: "" },
-  { id: "7", date: (() => { const d=new Date(); d.setDate(d.getDate()-6); return d.toISOString().split("T")[0]; })(), time: "21:00", mood: "anxious", stress_level: 7, triggers: ["Work deadline", "Sleep deprivation"], physical_signs: ["Headache", "Fatigue"], notes: "Monday always feels heavy." },
-];
-
-const MOCK_INSIGHT = `Over the past week, your stress has tended to peak in the evenings — particularly around work deadlines, which appeared in four of your seven entries. Your body has been signaling this pattern through recurring neck tension and headaches, often together.
-
-Two days stand out as genuinely lighter — Wednesday and Saturday, when you had no active triggers and your stress sat below 4. On both days you noted feeling settled and present.
-
-The beginning of your week tends to carry more weight than the end. This is useful information: Monday and Tuesday may benefit from a little extra gentleness in how you pace yourself.`;
-
-const MOCK_PLANT = { stage: "seedling", check_ins: 7, days_active: 12 };
 
 // ── Plant Illustrations ───────────────────────────────────────────────────────
 const PlantSVG = ({ stage, size = 120 }) => {

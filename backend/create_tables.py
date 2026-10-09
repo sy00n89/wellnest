@@ -1,4 +1,4 @@
-"""Create the Wellnest DynamoDB tables in a local DynamoDB.
+"""Create the Wellnest DynamoDB table in a local DynamoDB.
 
 Mirrors the table definitions in template.yaml. Safe to run more than once:
 tables that already exist are skipped.
@@ -17,26 +17,6 @@ TABLES = [
         'AttributeDefinitions': [
             {'AttributeName': 'user_id', 'AttributeType': 'S'},
             {'AttributeName': 'timestamp', 'AttributeType': 'N'},
-        ],
-    },
-    {
-        'TableName': os.environ.get('PLANT_TABLE', 'wellnest-plant'),
-        'KeySchema': [
-            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
-        ],
-        'AttributeDefinitions': [
-            {'AttributeName': 'user_id', 'AttributeType': 'S'},
-        ],
-    },
-    {
-        'TableName': os.environ.get('PATTERNS_TABLE', 'wellnest-patterns'),
-        'KeySchema': [
-            {'AttributeName': 'user_id', 'KeyType': 'HASH'},
-            {'AttributeName': 'trigger', 'KeyType': 'RANGE'},
-        ],
-        'AttributeDefinitions': [
-            {'AttributeName': 'user_id', 'AttributeType': 'S'},
-            {'AttributeName': 'trigger', 'AttributeType': 'S'},
         ],
     },
 ]

@@ -26,7 +26,6 @@ def cors_headers():
 
 def lambda_handler(event, context):
     method = event.get('httpMethod', '')
-    path = event.get('path', '')
 
     if method == 'OPTIONS':
         return {'statusCode': 200, 'headers': cors_headers(), 'body': ''}

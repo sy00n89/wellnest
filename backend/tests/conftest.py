@@ -11,8 +11,6 @@ import pytest
 # every test, so running tests never deletes your local dev data.
 os.environ.setdefault('DYNAMODB_ENDPOINT', 'http://localhost:8001')
 os.environ['ENTRIES_TABLE'] = 'test-entries'
-os.environ['PLANT_TABLE'] = 'test-plant'
-os.environ['PATTERNS_TABLE'] = 'test-patterns'
 os.environ.setdefault('AWS_DEFAULT_REGION', 'us-east-1')
 os.environ.setdefault('AWS_ACCESS_KEY_ID', 'local')
 os.environ.setdefault('AWS_SECRET_ACCESS_KEY', 'local')
