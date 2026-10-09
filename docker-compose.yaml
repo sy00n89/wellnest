@@ -22,8 +22,6 @@ services:
     environment:
       DYNAMODB_ENDPOINT: http://dynamodb:8000
       ENTRIES_TABLE: wellnest-entries
-      PLANT_TABLE: wellnest-plant
-      PATTERNS_TABLE: wellnest-patterns
       AWS_DEFAULT_REGION: us-east-1
       AWS_ACCESS_KEY_ID: local
       AWS_SECRET_ACCESS_KEY: local
